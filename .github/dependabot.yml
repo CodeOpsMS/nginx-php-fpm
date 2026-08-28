@@ -27,6 +27,25 @@ updates:
           - minor
           - patch
 
+  - package-ecosystem: docker
+    directory: /container/ci/kcov
+    schedule:
+      interval: daily
+      time: "02:30"
+      timezone: Europe/Berlin
+    cooldown:
+      default-days: 3
+      semver-major-days: 30
+      semver-minor-days: 7
+      semver-patch-days: 3
+    open-pull-requests-limit: 5
+    rebase-strategy: auto
+    labels:
+      - dependencies
+      - docker
+    commit-message:
+      prefix: deps
+
   - package-ecosystem: github-actions
     directory: /
     schedule:

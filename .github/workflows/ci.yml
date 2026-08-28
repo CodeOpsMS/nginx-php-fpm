@@ -129,7 +129,7 @@ jobs:
         run: |
           set -Eeuo pipefail
           sudo apt-get update
-          sudo apt-get install --yes --no-install-recommends bats kcov
+          sudo apt-get install --yes --no-install-recommends bats
 
       - name: Run unit and contract tests
         env:
@@ -138,8 +138,31 @@ jobs:
           make contract
           make test
 
+      - name: Build pinned coverage runner
+        run: >-
+          docker build
+          --file container/ci/kcov/Dockerfile
+          --tag local/kcov:ci
+          container/ci/kcov
+
       - name: Enforce first-party coverage
-        run: make coverage
+        run: |
+          set -Eeuo pipefail
+          mkdir -p build/coverage
+          docker run --rm \
+            --network none \
+            --read-only \
+            --cap-drop ALL \
+            --security-opt no-new-privileges \
+            --security-opt seccomp=unconfined \
+            --tmpfs /tmp:rw,nosuid,nodev,mode=1777 \
+            --user "$(id -u):$(id -g)" \
+            --env HOME=/tmp \
+            --volume "${GITHUB_WORKSPACE}:${GITHUB_WORKSPACE}:ro" \
+            --volume "${GITHUB_WORKSPACE}/build/coverage:${GITHUB_WORKSPACE}/build/coverage:rw" \
+            --workdir "${GITHUB_WORKSPACE}" \
+            local/kcov:ci \
+            bash ./scripts/test/coverage.sh
 
       - name: Publish coverage summary
         if: always() && hashFiles('build/coverage/cobertura.xml') != ''

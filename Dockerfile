@@ -12,6 +12,7 @@ COPY container/extensions/composer.json /tmp/extensions/composer.json
 
 # This stage is discarded. No compiler, headers, PIE, or extension source is
 # copied into the runtime stage.
+# OPcache is built into PHP 8.5 and is verified below, not rebuilt here.
 # hadolint ignore=DL3018,SC2086
 RUN set -eux; \
     apk add --no-cache --virtual .php-build-deps \
@@ -37,7 +38,6 @@ RUN set -eux; \
         intl \
         mbstring \
         mysqli \
-        opcache \
         pdo_mysql \
         pdo_pgsql \
         soap \

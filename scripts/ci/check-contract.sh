@@ -11,6 +11,7 @@ CONFIG_LIB="$ROOT/rootfs/usr/local/lib/nginx-php-fpm/config.sh"
 
 required_files=(
   Dockerfile
+  container/ci/kcov/Dockerfile
   container/extensions/composer.json
   rootfs/usr/local/bin/container-entrypoint
   rootfs/usr/local/bin/healthcheck

@@ -52,6 +52,16 @@ done < <(
     -print 2>/dev/null | sort
 )
 
+dockerfiles=()
+while IFS= read -r file; do
+  dockerfiles+=("$file")
+done < <(
+  find "$ROOT" -type f -name Dockerfile \
+    -not -path '*/.git/*' \
+    -not -path '*/build/*' \
+    -print 2>/dev/null | sort
+)
+
 if ((${#shell_files[@]} == 0)); then
   fail "no shell sources found"
 fi
@@ -83,9 +93,9 @@ if tool_available shfmt; then
   fi
 fi
 
-if [[ -f $ROOT/Dockerfile ]] && tool_available hadolint; then
+if ((${#dockerfiles[@]} > 0)) && tool_available hadolint; then
   log "running Hadolint"
-  hadolint "$ROOT/Dockerfile"
+  hadolint "${dockerfiles[@]}"
 fi
 
 if [[ -d $ROOT/.github/workflows ]] && tool_available actionlint; then

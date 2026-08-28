@@ -181,8 +181,9 @@ logic. See [CONTRIBUTING.md](CONTRIBUTING.md) for tool requirements and pull-req
 
 ## Automated maintenance
 
-Dependabot checks the Dockerfile, every GitHub Action pin, and the build-only Composer pin for
-the phpredis extension daily. Composer and its metadata are never copied into the runtime.
+Dependabot checks the production and coverage-runner Dockerfiles, every GitHub Action pin, and
+the build-only Composer pin for the phpredis extension daily. Composer and its metadata are never
+copied into the runtime.
 Patch and digest updates wait three days, minor updates wait seven days, and security updates
 bypass cooldown. Patch and minor updates are squash-merged only after the full `CI / gate`
 check succeeds. PHP 8.6 or newer and all major updates require maintainer review.
