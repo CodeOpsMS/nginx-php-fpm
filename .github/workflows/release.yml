@@ -1,0 +1,403 @@
+name: Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: SemVer tag without a v prefix
+        required: true
+        default: 0.4.0
+        type: string
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+env:
+  IMAGE_NAME: ghcr.io/codeopsms/nginx-php-fpm
+
+jobs:
+  validate:
+    name: validate release request
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      actions: read # Confirm that this exact main commit passed the CI workflow.
+      contents: read
+    outputs:
+      release-state: ${{ steps.version.outputs.release-state }}
+      version: ${{ steps.version.outputs.version }}
+    steps:
+      - name: Check out current main commit
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Validate version and immutable targets
+        id: version
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REQUESTED_VERSION: ${{ inputs.version }}
+        run: |
+          set -Eeuo pipefail
+          [[ "${GITHUB_REF}" == "refs/heads/main" ]]
+          [[ "${REQUESTED_VERSION}" =~ ^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$ ]]
+          test "$(<VERSION)" = "${REQUESTED_VERSION}"
+          test "$(git rev-parse origin/main)" = "${GITHUB_SHA}"
+          tag_ref="$(git ls-remote --tags origin "refs/tags/${REQUESTED_VERSION}" | awk '{ print $1 }')"
+          if [[ -n "${tag_ref}" ]]; then
+            test "$(git rev-list -n 1 "${REQUESTED_VERSION}")" = "${GITHUB_SHA}"
+          fi
+          release_state=none
+          if release_json="$(gh release view "${REQUESTED_VERSION}" \
+            --repo "${GITHUB_REPOSITORY}" \
+            --json isDraft,tagName,targetCommitish 2>/dev/null)"; then
+            jq --exit-status \
+              --arg sha "${GITHUB_SHA}" \
+              --arg version "${REQUESTED_VERSION}" \
+              '.isDraft == true and .tagName == $version and .targetCommitish == $sha' \
+              <<<"${release_json}"
+            release_state=draft
+          fi
+          if [[ "${REQUESTED_VERSION}" == "0.4.0" ]]; then
+            grep -Eq '^FROM php:8\.5\.10-fpm-alpine3\.24@sha256:[0-9a-f]{64}([[:space:]]|$)' Dockerfile
+          fi
+          successful_runs="$(gh run list \
+            --repo "${GITHUB_REPOSITORY}" \
+            --workflow ci.yml \
+            --commit "${GITHUB_SHA}" \
+            --branch main \
+            --event push \
+            --status completed \
+            --limit 20 \
+            --json conclusion \
+            --jq '[.[] | select(.conclusion == "success")] | length')"
+          test "${successful_runs}" -gt 0
+          echo "release-state=${release_state}" >> "${GITHUB_OUTPUT}"
+          echo "version=${REQUESTED_VERSION}" >> "${GITHUB_OUTPUT}"
+
+  image:
+    name: build and verify (${{ matrix.arch }})
+    needs: validate
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: amd64
+            runner: ubuntu-24.04
+          - arch: arm64
+            runner: ubuntu-24.04-arm
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 60
+    permissions:
+      attestations: write # Publish GitHub artifact attestations for each tested platform digest.
+      contents: read
+      id-token: write # Obtain the OIDC identity used to sign attestations.
+      packages: write # Push digest-only release candidates to GHCR.
+    env:
+      TARGET_ARCH: ${{ matrix.arch }}
+    steps:
+      - name: Check out release commit
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@37fe631027851001ddb9b187196cc803df7f5f0e # v4.3.0
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ github.token }}
+
+      - name: Detect resumable immutable candidate
+        id: existing
+        env:
+          RELEASE_VERSION: ${{ needs.validate.outputs.version }}
+        run: |
+          set -Eeuo pipefail
+          existing_index="${RUNNER_TEMP}/existing-release-index.json"
+          if docker buildx imagetools inspect "${IMAGE_NAME}:${RELEASE_VERSION}" --raw > "${existing_index}" 2>/dev/null; then
+            jq --exit-status \
+              '[.manifests[].platform | "\(.os)/\(.architecture)"] | sort == ["linux/amd64", "linux/arm64"]' \
+              "${existing_index}"
+            digest="$(jq --exit-status --raw-output --arg arch "${TARGET_ARCH}" \
+              '[.manifests[] | select(.platform.os == "linux" and .platform.architecture == $arch) | .digest]
+               | if length == 1 then .[0] else error("expected exactly one platform digest") end' \
+              "${existing_index}")"
+            [[ "${digest}" =~ ^sha256:[0-9a-f]{64}$ ]]
+            echo "digest=${digest}" >> "${GITHUB_OUTPUT}"
+            echo "reuse=true" >> "${GITHUB_OUTPUT}"
+          else
+            echo "reuse=false" >> "${GITHUB_OUTPUT}"
+          fi
+
+      - name: Capture build metadata
+        id: metadata
+        if: steps.existing.outputs.reuse != 'true'
+        run: echo "created=$(date --utc +'%Y-%m-%dT%H:%M:%SZ')" >> "${GITHUB_OUTPUT}"
+
+      - name: Build and push platform image by digest
+        id: build
+        if: steps.existing.outputs.reuse != 'true'
+        uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a # v7.3.0
+        with:
+          context: .
+          platforms: linux/${{ matrix.arch }}
+          outputs: type=image,name=${{ env.IMAGE_NAME }},push-by-digest=true,name-canonical=true,push=true
+          build-args: |
+            BUILD_DATE=${{ steps.metadata.outputs.created }}
+            VCS_REF=${{ github.sha }}
+            VERSION=${{ needs.validate.outputs.version }}
+          cache-from: type=gha,scope=release-${{ matrix.arch }}
+          cache-to: type=gha,mode=max,scope=release-${{ matrix.arch }}
+          pull: true
+          no-cache: true
+          provenance: false
+          sbom: false
+
+      - name: Pull exact release candidate
+        id: subject
+        env:
+          BUILT_DIGEST: ${{ steps.build.outputs.digest }}
+          EXISTING_DIGEST: ${{ steps.existing.outputs.digest }}
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_VERSION: ${{ needs.validate.outputs.version }}
+          REUSE_EXISTING: ${{ steps.existing.outputs.reuse }}
+        run: |
+          set -Eeuo pipefail
+          if [[ "${REUSE_EXISTING}" == "true" ]]; then
+            digest="${EXISTING_DIGEST}"
+          else
+            digest="${BUILT_DIGEST}"
+          fi
+          [[ "${digest}" =~ ^sha256:[0-9a-f]{64}$ ]]
+          mkdir -p build/release
+          printf '%s\n' "${digest}" > "build/release/digest-${TARGET_ARCH}"
+          echo "digest=${digest}" >> "${GITHUB_OUTPUT}"
+          echo "image-ref=${IMAGE_NAME}@${digest}" >> "${GITHUB_OUTPUT}"
+          docker pull "${IMAGE_NAME}@${digest}"
+          actual_revision="$(docker image inspect \
+            --format '{{ index .Config.Labels "org.opencontainers.image.revision" }}' \
+            "${IMAGE_NAME}@${digest}")"
+          actual_version="$(docker image inspect \
+            --format '{{ index .Config.Labels "org.opencontainers.image.version" }}' \
+            "${IMAGE_NAME}@${digest}")"
+          test "${actual_revision}" = "${GITHUB_SHA}"
+          test "${actual_version}" = "${RELEASE_VERSION}"
+          if [[ "${REUSE_EXISTING}" == "true" ]]; then
+            gh attestation verify "oci://${IMAGE_NAME}@${digest}" \
+              --repo "${GITHUB_REPOSITORY}" \
+              --source-digest "${GITHUB_SHA}" \
+              --signer-workflow "CodeOpsMS/nginx-php-fpm/.github/workflows/release.yml"
+          fi
+
+      - name: Run native release contract suite
+        env:
+          EXPECTED_ARCH: ${{ matrix.arch }}
+          EXPECTED_REVISION: ${{ github.sha }}
+          IMAGE: ${{ steps.subject.outputs.image-ref }}
+          REQUIRE_BUILD_METADATA: "1"
+        run: make integration IMAGE="${IMAGE}" EXPECTED_ARCH="${EXPECTED_ARCH}"
+
+      - name: Scan exact release candidate
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          image-ref: ${{ steps.subject.outputs.image-ref }}
+          format: sarif
+          output: build/release/trivy-${{ matrix.arch }}.sarif
+          severity: HIGH,CRITICAL
+          ignore-unfixed: true
+          vuln-type: os,library
+          exit-code: "1"
+
+      - name: Generate platform SBOM
+        uses: anchore/sbom-action@e22c389904149dbc22b58101806040fa8d37a610 # v0.24.0
+        with:
+          image: ${{ steps.subject.outputs.image-ref }}
+          format: spdx-json
+          output-file: build/release/sbom-${{ matrix.arch }}.spdx.json
+          upload-artifact: false
+          upload-release-assets: false
+
+      - name: Attest platform provenance
+        if: steps.existing.outputs.reuse != 'true'
+        uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
+        with:
+          subject-name: ${{ env.IMAGE_NAME }}
+          subject-digest: ${{ steps.subject.outputs.digest }}
+          push-to-registry: true
+
+      - name: Attest platform SBOM
+        if: steps.existing.outputs.reuse != 'true'
+        uses: actions/attest-sbom@c604332985a26aa8cf1bdc465b92731239ec6b9e # v4.1.0
+        with:
+          subject-name: ${{ env.IMAGE_NAME }}
+          subject-digest: ${{ steps.subject.outputs.digest }}
+          sbom-path: build/release/sbom-${{ matrix.arch }}.spdx.json
+          push-to-registry: true
+
+      - name: Upload verified candidate evidence
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: release-${{ matrix.arch }}
+          path: build/release/
+          if-no-files-found: error
+          retention-days: 90
+
+  publish:
+    name: publish immutable release
+    needs:
+      - validate
+      - image
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    permissions:
+      attestations: write # Publish GitHub artifact attestations for the release index.
+      contents: write # Create the immutable Git tag and GitHub release with SBOM assets.
+      id-token: write # Obtain the OIDC identity used to sign attestations.
+      packages: write # Publish the version and moving release aliases to GHCR.
+    env:
+      VERSION: ${{ needs.validate.outputs.version }}
+    steps:
+      - name: Download verified candidate evidence
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          pattern: release-*
+          path: build/release
+          merge-multiple: true
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@37fe631027851001ddb9b187196cc803df7f5f0e # v4.3.0
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ github.token }}
+
+      - name: Create release manifest from verified digests
+        id: manifest
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -Eeuo pipefail
+          assert_current_main() {
+            local current_main_sha
+            current_main_sha="$(gh api \
+              "repos/${GITHUB_REPOSITORY}/git/ref/heads/main" \
+              --jq '.object.sha')"
+            if [[ "${current_main_sha}" != "${GITHUB_SHA}" ]]; then
+              echo "refusing release publication from stale main ${GITHUB_SHA}; current main is ${current_main_sha}" >&2
+              return 1
+            fi
+          }
+          major="${VERSION%%.*}"
+          remainder="${VERSION#*.}"
+          minor="${major}.${remainder%%.*}"
+          amd64_digest="$(<build/release/digest-amd64)"
+          arm64_digest="$(<build/release/digest-arm64)"
+
+          if docker buildx imagetools inspect "${IMAGE_NAME}:${VERSION}" --raw > build/release/existing-index.json 2>/dev/null; then
+            existing_amd64="$(jq --raw-output '.manifests[] | select(.platform.os == "linux" and .platform.architecture == "amd64") | .digest' build/release/existing-index.json)"
+            existing_arm64="$(jq --raw-output '.manifests[] | select(.platform.os == "linux" and .platform.architecture == "arm64") | .digest' build/release/existing-index.json)"
+            test "${existing_amd64}" = "${amd64_digest}"
+            test "${existing_arm64}" = "${arm64_digest}"
+            assert_current_main
+            docker buildx imagetools create \
+              --tag "${IMAGE_NAME}:${minor}" \
+              --tag "${IMAGE_NAME}:${major}" \
+              --tag "${IMAGE_NAME}:latest" \
+              "${IMAGE_NAME}:${VERSION}"
+          else
+            assert_current_main
+            docker buildx imagetools create \
+              --tag "${IMAGE_NAME}:${VERSION}" \
+              --tag "${IMAGE_NAME}:${minor}" \
+              --tag "${IMAGE_NAME}:${major}" \
+              --tag "${IMAGE_NAME}:latest" \
+              "${IMAGE_NAME}@${amd64_digest}" \
+              "${IMAGE_NAME}@${arm64_digest}"
+          fi
+
+          docker buildx imagetools inspect "${IMAGE_NAME}:${VERSION}" --raw > build/release/index.json
+          jq --exit-status \
+            '[.manifests[].platform | "\(.os)/\(.architecture)"] | sort == ["linux/amd64", "linux/arm64"]' \
+            build/release/index.json
+          docker buildx imagetools inspect "${IMAGE_NAME}:${VERSION}" \
+            --format '{{json .Manifest}}' > build/release/index-descriptor.json
+          index_digest="$(jq --raw-output '.digest' build/release/index-descriptor.json)"
+          test "${index_digest}" != null
+
+          for tag in "${VERSION}" "${minor}" "${major}" latest; do
+            tag_digest="$(docker buildx imagetools inspect "${IMAGE_NAME}:${tag}" --format '{{json .Manifest}}' | jq --raw-output '.digest')"
+            test "${tag_digest}" = "${index_digest}"
+          done
+
+          {
+            echo "image=${IMAGE_NAME}"
+            echo "version=${VERSION}"
+            echo "index=${index_digest}"
+            echo "linux/amd64=${amd64_digest}"
+            echo "linux/arm64=${arm64_digest}"
+            echo "revision=${GITHUB_SHA}"
+          } | tee build/release/digests.txt
+          echo "digest=${index_digest}" >> "${GITHUB_OUTPUT}"
+
+      - name: Attest release index provenance
+        uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
+        with:
+          subject-name: ${{ env.IMAGE_NAME }}
+          subject-digest: ${{ steps.manifest.outputs.digest }}
+          push-to-registry: true
+
+      - name: Verify published attestation
+        env:
+          GH_TOKEN: ${{ github.token }}
+          INDEX_DIGEST: ${{ steps.manifest.outputs.digest }}
+        run: gh attestation verify "oci://${IMAGE_NAME}@${INDEX_DIGEST}" --repo "${GITHUB_REPOSITORY}"
+
+      - name: Stage release assets in a resumable draft
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_STATE: ${{ needs.validate.outputs.release-state }}
+        run: |
+          set -Eeuo pipefail
+          if [[ "${RELEASE_STATE}" == "none" ]]; then
+            gh release create "${VERSION}" \
+              --repo "${GITHUB_REPOSITORY}" \
+              --target "${GITHUB_SHA}" \
+              --title "${VERSION}" \
+              --generate-notes \
+              --draft
+          else
+            test "${RELEASE_STATE}" = draft
+          fi
+          gh release upload "${VERSION}" \
+            build/release/digests.txt \
+            build/release/sbom-amd64.spdx.json \
+            build/release/sbom-arm64.spdx.json \
+            --repo "${GITHUB_REPOSITORY}" \
+            --clobber
+
+      - name: Upload final release evidence
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: release-${{ env.VERSION }}-evidence
+          path: build/release/
+          if-no-files-found: error
+          retention-days: 90
+
+      - name: Publish immutable GitHub release and tag
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release edit "${VERSION}" --repo "${GITHUB_REPOSITORY}" --draft=false

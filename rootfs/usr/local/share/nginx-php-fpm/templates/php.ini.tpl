@@ -1,0 +1,14 @@
+date.timezone = "{{TZ}}"
+display_errors = {{PHP_DISPLAY_ERRORS}}
+display_startup_errors = 0
+expose_php = Off
+log_errors = On
+error_log = /proc/self/fd/2
+max_execution_time = {{PHP_MAX_EXECUTION_TIME}}
+memory_limit = {{PHP_MEMORY_LIMIT}}
+upload_max_filesize = {{PHP_UPLOAD_MAX_FILESIZE}}
+post_max_size = {{PHP_POST_MAX_SIZE}}
+opcache.enable = {{PHP_OPCACHE_ENABLE}}
+opcache.enable_cli = 0
+opcache.validate_timestamps = {{PHP_OPCACHE_VALIDATE_TIMESTAMPS}}
+cgi.fix_pathinfo = 0

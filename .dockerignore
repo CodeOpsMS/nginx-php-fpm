@@ -1,0 +1,13 @@
+.git
+.github
+.agents
+.codex
+.DS_Store
+coverage
+build
+dist
+reports
+tests
+*.log
+*.md
+!VERSION

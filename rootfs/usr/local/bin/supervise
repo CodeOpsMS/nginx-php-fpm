@@ -1,0 +1,74 @@
+#!/usr/bin/env bash
+set -Eeuo pipefail
+
+readonly CONFIG_DIR=${NPFM_CONFIG_DIR:-/tmp/nginx-php-fpm/current}
+shutdown_requested=0
+php_fpm_pid=''
+nginx_pid=''
+
+log() {
+  printf 'supervisor: %s\n' "$*" >&2
+}
+
+stop_children() {
+  local signal=${1:-TERM}
+
+  if [[ -n $nginx_pid ]]; then
+    kill "-${signal}" "$nginx_pid" 2>/dev/null || true
+  fi
+  if [[ -n $php_fpm_pid ]]; then
+    kill "-${signal}" "$php_fpm_pid" 2>/dev/null || true
+  fi
+}
+
+# Invoked indirectly by the signal traps below.
+# shellcheck disable=SC2329
+request_shutdown() {
+  local signal=${1:-TERM}
+
+  shutdown_requested=1
+  trap - TERM INT QUIT
+  stop_children "$signal"
+}
+
+trap 'request_shutdown QUIT' TERM QUIT
+trap 'request_shutdown TERM' INT
+
+php-fpm --nodaemonize --fpm-config "$CONFIG_DIR/php-fpm.conf" &
+php_fpm_pid=$!
+
+nginx -c "$CONFIG_DIR/nginx.conf" -g 'daemon off;' &
+nginx_pid=$!
+
+set +e
+wait -n "$php_fpm_pid" "$nginx_pid"
+first_status=$?
+set -e
+
+if ((shutdown_requested == 0)); then
+  log "a managed service exited unexpectedly; stopping the remaining service"
+  stop_children QUIT
+fi
+
+set +e
+wait "$nginx_pid" 2>/dev/null
+nginx_status=$?
+wait "$php_fpm_pid" 2>/dev/null
+php_fpm_status=$?
+set -e
+
+if ((shutdown_requested == 1)) && ((first_status >= 128)); then
+  exit 0
+fi
+if ((first_status != 0)); then
+  exit "$first_status"
+fi
+if ((nginx_status != 0 && nginx_status != 143)); then
+  exit "$nginx_status"
+fi
+if ((php_fpm_status != 0 && php_fpm_status != 143)); then
+  exit "$php_fpm_status"
+fi
+
+# A daemon ending cleanly without an external shutdown is still a service loss.
+exit 1

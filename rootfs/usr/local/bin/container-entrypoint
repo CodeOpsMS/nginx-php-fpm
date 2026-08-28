@@ -1,0 +1,56 @@
+#!/usr/bin/env bash
+set -Eeuo pipefail
+
+# shellcheck source-path=SCRIPTDIR
+# shellcheck source=../lib/nginx-php-fpm/config.sh
+source /usr/local/lib/nginx-php-fpm/config.sh
+
+readonly RUNTIME_ROOT=${NPFM_RUNTIME_ROOT:-/tmp/nginx-php-fpm}
+
+validate_rendered_config() {
+  local candidate=${1:?candidate directory is required}
+  local scan_dirs="/usr/local/etc/php/conf.d:${candidate}/php/conf.d:/etc/php/conf.d"
+
+  PHP_INI_SCAN_DIR=$scan_dirs php-fpm -tt -y "$candidate/php-fpm.conf"
+  nginx -t -c "$candidate/nginx.conf"
+}
+
+activate_config() {
+  local candidate=${1:?candidate directory is required}
+  local next_link="${RUNTIME_ROOT}/.current.$$"
+
+  ln -s "$candidate" "$next_link"
+  mv -fT "$next_link" "${RUNTIME_ROOT}/current"
+}
+
+main() {
+  local candidate
+
+  umask 027
+  mkdir -p \
+    "$RUNTIME_ROOT/config" \
+    "$RUNTIME_ROOT/run" \
+    "$RUNTIME_ROOT/cache/client_temp" \
+    "$RUNTIME_ROOT/cache/fastcgi_temp" \
+    "$RUNTIME_ROOT/cache/proxy_temp" \
+    "$RUNTIME_ROOT/cache/scgi_temp" \
+    "$RUNTIME_ROOT/cache/uwsgi_temp"
+
+  candidate=$(mktemp -d "${RUNTIME_ROOT}/config/rendered.XXXXXXXX")
+  trap 'rm -rf -- "$candidate"' ERR
+
+  render_config "$candidate"
+  validate_rendered_config "$candidate"
+  activate_config "$candidate"
+  trap - ERR
+
+  export NPFM_CONFIG_DIR="${RUNTIME_ROOT}/current"
+  export PHP_INI_SCAN_DIR="/usr/local/etc/php/conf.d:${NPFM_CONFIG_DIR}/php/conf.d:/etc/php/conf.d"
+
+  if (($# == 0)); then
+    set -- /usr/local/bin/supervise
+  fi
+  exec "$@"
+}
+
+main "$@"

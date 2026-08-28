@@ -1,0 +1,326 @@
+name: CI
+
+on:
+  pull_request:
+    branches:
+      - main
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+  schedule:
+    - cron: "17 3 * * *"
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+permissions:
+  contents: read
+
+env:
+  IMAGE_NAME: ghcr.io/codeopsms/nginx-php-fpm
+
+jobs:
+  lint:
+    name: lint and policy
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Review dependency changes
+        if: github.event_name == 'pull_request'
+        uses: actions/dependency-review-action@a1d282b36b6f3519aa1f3fc636f609c47dddb294 # v5.0.0
+        with:
+          fail-on-severity: high
+
+      - name: Install shell lint tools
+        env:
+          SHFMT_SHA256: fb096c5d1ac6beabbdbaa2874d025badb03ee07929f0c9ff67563ce8c75398b1
+          SHFMT_VERSION: v3.13.1
+          HADOLINT_SHA256: c7187db94eeeeca956519a6af171adc31453941a1e777961f6e680f697c8c507
+          HADOLINT_VERSION: v2.15.1
+          ACTIONLINT_SHA256: 8aca8db96f1b94770f1b0d72b6dddcb1ebb8123cb3712530b08cc387b349a3d8
+          ACTIONLINT_VERSION: 1.7.12
+        run: |
+          set -Eeuo pipefail
+          sudo apt-get update
+          sudo apt-get install --yes --no-install-recommends shellcheck
+
+          curl --fail --location --silent --show-error \
+            --output "${RUNNER_TEMP}/shfmt" \
+            "https://github.com/mvdan/sh/releases/download/${SHFMT_VERSION}/shfmt_${SHFMT_VERSION}_linux_amd64"
+          echo "${SHFMT_SHA256}  ${RUNNER_TEMP}/shfmt" | sha256sum --check --strict
+          sudo install -m 0755 "${RUNNER_TEMP}/shfmt" /usr/local/bin/shfmt
+
+          curl --fail --location --silent --show-error \
+            --output "${RUNNER_TEMP}/hadolint" \
+            "https://github.com/hadolint/hadolint/releases/download/${HADOLINT_VERSION}/hadolint-linux-x86_64"
+          echo "${HADOLINT_SHA256}  ${RUNNER_TEMP}/hadolint" | sha256sum --check --strict
+          sudo install -m 0755 "${RUNNER_TEMP}/hadolint" /usr/local/bin/hadolint
+
+          curl --fail --location --silent --show-error \
+            --output "${RUNNER_TEMP}/actionlint.tar.gz" \
+            "https://github.com/rhysd/actionlint/releases/download/v${ACTIONLINT_VERSION}/actionlint_${ACTIONLINT_VERSION}_linux_amd64.tar.gz"
+          echo "${ACTIONLINT_SHA256}  ${RUNNER_TEMP}/actionlint.tar.gz" | sha256sum --check --strict
+          mkdir -p "${RUNNER_TEMP}/actionlint"
+          tar -xzf "${RUNNER_TEMP}/actionlint.tar.gz" -C "${RUNNER_TEMP}/actionlint" actionlint
+          sudo install -m 0755 "${RUNNER_TEMP}/actionlint/actionlint" /usr/local/bin/actionlint
+
+      - name: Lint project sources
+        env:
+          REQUIRE_LINT_TOOLS: "1"
+        run: make lint
+
+      - name: Lint GitHub Actions workflows
+        uses: raven-actions/actionlint@3d39aea434753780c3b3d4a1a31c854b4dbf49d7 # v2.2.0
+
+      - name: Audit GitHub Actions security
+        uses: zizmorcore/zizmor-action@3dc1ecc9bcb9e94e9b2c709687979e1298497054 # v0.6.2
+        with:
+          advanced-security: false
+          annotations: true
+          config: .github/zizmor.yml
+          persona: pedantic
+          version: 1.29.0
+
+      - name: Scan repository history for secrets
+        uses: gitleaks/gitleaks-action@e0c47f4f8be36e29cdc102c57e68cb5cbf0e8d1e # v3.0.0
+        env:
+          GITLEAKS_ENABLE_COMMENTS: "false"
+          GITHUB_TOKEN: ${{ github.token }}
+
+      - name: Scan configuration for vulnerabilities
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          scan-type: config
+          scan-ref: .
+          format: sarif
+          output: build/trivy-config.sarif
+          severity: HIGH,CRITICAL
+          ignore-unfixed: false
+          exit-code: "1"
+
+      - name: Upload configuration scan
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: trivy-config
+          path: build/trivy-config.sarif
+          if-no-files-found: warn
+          retention-days: 14
+
+  source-tests:
+    name: source tests and coverage
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Install test tools
+        run: |
+          set -Eeuo pipefail
+          sudo apt-get update
+          sudo apt-get install --yes --no-install-recommends bats kcov
+
+      - name: Run unit and contract tests
+        env:
+          BATS_JUNIT: "1"
+        run: |
+          make contract
+          make test
+
+      - name: Enforce first-party coverage
+        run: make coverage
+
+      - name: Publish coverage summary
+        if: always() && hashFiles('build/coverage/cobertura.xml') != ''
+        run: |
+          python3 - <<'PY'
+          import os
+          import xml.etree.ElementTree as ET
+
+          root = ET.parse("build/coverage/cobertura.xml").getroot()
+          rate = float(root.attrib.get("line-rate", "0")) * 100
+          with open(os.environ["GITHUB_STEP_SUMMARY"], "a", encoding="utf-8") as summary:
+              summary.write(f"## First-party line coverage\n\n**{rate:.2f}%**\n")
+          PY
+
+      - name: Upload tests and coverage
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: source-tests-and-coverage
+          path: |
+            build/test-results/
+            build/coverage/
+          if-no-files-found: error
+          retention-days: 14
+
+  image-readonly:
+    name: verify images without publication
+    if: github.event_name == 'pull_request' || github.event_name == 'workflow_dispatch'
+    uses: ./.github/workflows/ci-image.yml
+    with:
+      publish: false
+    permissions:
+      contents: read
+
+  image-publish:
+    name: verify and publish image candidates
+    if: >-
+      (github.event_name == 'push' && github.ref == 'refs/heads/main') ||
+      github.event_name == 'schedule'
+    uses: ./.github/workflows/ci-image.yml
+    with:
+      publish: true
+    permissions:
+      attestations: write # Publish GitHub artifact attestations for tested platform digests.
+      contents: read
+      id-token: write # Obtain the OIDC identity used to sign attestations.
+      packages: write # Push digest-only tested candidates to GHCR.
+
+  gate:
+    name: gate
+    if: always()
+    needs:
+      - image-publish
+      - image-readonly
+      - lint
+      - source-tests
+    runs-on: ubuntu-24.04
+    permissions: {}
+    steps:
+      - name: Require every CI job
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          PUBLISH_IMAGE_RESULT: ${{ needs.image-publish.result }}
+          READONLY_IMAGE_RESULT: ${{ needs.image-readonly.result }}
+          LINT_RESULT: ${{ needs.lint.result }}
+          SOURCE_RESULT: ${{ needs.source-tests.result }}
+        run: |
+          set -Eeuo pipefail
+          test "${LINT_RESULT}" = success
+          test "${SOURCE_RESULT}" = success
+          case "${EVENT_NAME}" in
+            pull_request | workflow_dispatch)
+              test "${READONLY_IMAGE_RESULT}" = success
+              test "${PUBLISH_IMAGE_RESULT}" = skipped
+              ;;
+            push | schedule)
+              test "${READONLY_IMAGE_RESULT}" = skipped
+              test "${PUBLISH_IMAGE_RESULT}" = success
+              ;;
+            *)
+              echo "unexpected CI event: ${EVENT_NAME}" >&2
+              exit 1
+              ;;
+          esac
+
+  publish-main:
+    name: publish tested multi-architecture image
+    if: >-
+      needs.gate.result == 'success' &&
+      ((github.event_name == 'push' && github.ref == 'refs/heads/main') || github.event_name == 'schedule')
+    needs:
+      - gate
+      - image-publish
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    permissions:
+      attestations: write # Publish GitHub artifact attestations for the multi-architecture index.
+      contents: read
+      id-token: write # Obtain the OIDC identity used to sign attestations.
+      packages: write # Assemble and tag the tested platform digests in GHCR.
+    steps:
+      - name: Download tested platform evidence
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          pattern: platform-*
+          path: build/platforms
+          merge-multiple: true
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@37fe631027851001ddb9b187196cc803df7f5f0e # v4.3.0
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ github.token }}
+
+      - name: Publish manifest from tested digests
+        id: manifest
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -Eeuo pipefail
+          assert_current_main() {
+            local current_main_sha
+            current_main_sha="$(gh api \
+              "repos/${GITHUB_REPOSITORY}/git/ref/heads/main" \
+              --jq '.object.sha')"
+            if [[ "${current_main_sha}" != "${GITHUB_SHA}" ]]; then
+              echo "refusing to move :main from stale run ${GITHUB_SHA}; current main is ${current_main_sha}" >&2
+              return 1
+            fi
+          }
+          amd64_digest="$(<build/platforms/digest-amd64)"
+          arm64_digest="$(<build/platforms/digest-arm64)"
+          if [[ "${GITHUB_EVENT_NAME}" == "push" ]] && \
+            docker buildx imagetools inspect "${IMAGE_NAME}:sha-${GITHUB_SHA}" --raw > build/existing-sha-index.json 2>/dev/null; then
+            existing_amd64="$(jq --raw-output '.manifests[] | select(.platform.os == "linux" and .platform.architecture == "amd64") | .digest' build/existing-sha-index.json)"
+            existing_arm64="$(jq --raw-output '.manifests[] | select(.platform.os == "linux" and .platform.architecture == "arm64") | .digest' build/existing-sha-index.json)"
+            test "${existing_amd64}" = "${amd64_digest}"
+            test "${existing_arm64}" = "${arm64_digest}"
+            assert_current_main
+            docker buildx imagetools create \
+              --tag "${IMAGE_NAME}:main" \
+              "${IMAGE_NAME}:sha-${GITHUB_SHA}"
+          else
+            tags=(--tag "${IMAGE_NAME}:main")
+            if [[ "${GITHUB_EVENT_NAME}" == "push" ]]; then
+              tags+=(--tag "${IMAGE_NAME}:sha-${GITHUB_SHA}")
+            fi
+            assert_current_main
+            docker buildx imagetools create \
+              "${tags[@]}" \
+              "${IMAGE_NAME}@${amd64_digest}" \
+              "${IMAGE_NAME}@${arm64_digest}"
+          fi
+          docker buildx imagetools inspect "${IMAGE_NAME}:main" --raw > build/index.json
+          jq --exit-status \
+            '[.manifests[].platform | "\(.os)/\(.architecture)"] | sort == ["linux/amd64", "linux/arm64"]' \
+            build/index.json
+          docker buildx imagetools inspect "${IMAGE_NAME}:main" \
+            --format '{{json .Manifest}}' > build/index-descriptor.json
+          index_digest="$(jq --raw-output '.digest' build/index-descriptor.json)"
+          test "${index_digest}" != null
+          echo "digest=${index_digest}" >> "${GITHUB_OUTPUT}"
+
+      - name: Attest index provenance
+        uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
+        with:
+          subject-name: ${{ env.IMAGE_NAME }}
+          subject-digest: ${{ steps.manifest.outputs.digest }}
+          push-to-registry: true
+
+      - name: Upload publication evidence
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: main-publication
+          path: |
+            build/index.json
+            build/index-descriptor.json
+            build/existing-sha-index.json
+          if-no-files-found: error
+          retention-days: 30

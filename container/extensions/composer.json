@@ -1,0 +1,9 @@
+{
+  "name": "codeopsms/nginx-php-fpm-extensions",
+  "description": "Build-only PHP extension pins for the nginx-php-fpm image",
+  "type": "project",
+  "license": "GPL-3.0-or-later",
+  "require": {
+    "phpredis/phpredis": "6.3.0"
+  }
+}

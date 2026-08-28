@@ -1,0 +1,90 @@
+name: Dependabot auto-merge
+
+on:
+  pull_request_target:
+    branches:
+      - main
+    types:
+      - opened
+      - reopened
+      - synchronize
+      - ready_for_review
+      - converted_to_draft
+
+concurrency:
+  group: dependabot-automerge-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+permissions: {}
+
+jobs:
+  merge:
+    name: reconcile squash auto-merge
+    if: >-
+      github.repository == 'CodeOpsMS/nginx-php-fpm' &&
+      github.event.pull_request.user.id == 49699333
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      contents: write # Enable GitHub's protected-branch auto-merge operation.
+      pull-requests: write # Read Dependabot metadata and update the pull request merge state.
+    steps:
+      - name: Read verified Dependabot metadata
+        id: metadata
+        uses: dependabot/fetch-metadata@25dd0e34f4fe68f24cc83900b1fe3fe149efef98 # v3.1.0
+        with:
+          github-token: ${{ github.token }}
+
+      - name: Classify safe update
+        id: eligibility
+        env:
+          DEPENDENCY_NAMES: ${{ steps.metadata.outputs.dependency-names }}
+          PR_DRAFT: ${{ github.event.pull_request.draft }}
+          UPDATE_TYPE: ${{ steps.metadata.outputs.update-type }}
+        run: |
+          set -Eeuo pipefail
+          eligible=false
+          if [[ "${PR_DRAFT}" == "false" ]]; then
+            if [[ "${UPDATE_TYPE}" == "version-update:semver-patch" ]]; then
+              eligible=true
+            elif [[ "${UPDATE_TYPE}" == "version-update:semver-minor" ]]; then
+              php_base_update=false
+              IFS=',' read -r -a dependencies <<<"${DEPENDENCY_NAMES}"
+              for dependency in "${dependencies[@]}"; do
+                dependency="${dependency//[[:space:]]/}"
+                case "${dependency}" in
+                  php | library/php | docker.io/library/php)
+                    php_base_update=true
+                    ;;
+                esac
+              done
+              if [[ "${php_base_update}" == "false" ]]; then
+                eligible=true
+              fi
+            fi
+          fi
+          echo "eligible=${eligible}" >> "${GITHUB_OUTPUT}"
+
+      - name: Enable protected squash auto-merge
+        if: steps.eligibility.outputs.eligible == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          REPOSITORY: ${{ github.repository }}
+        run: gh pr merge "${PR_NUMBER}" --repo "${REPOSITORY}" --auto --squash
+
+      - name: Disable auto-merge for ineligible update
+        if: steps.eligibility.outputs.eligible != 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          REPOSITORY: ${{ github.repository }}
+        run: |
+          set -Eeuo pipefail
+          auto_merge_enabled="$(gh pr view "${PR_NUMBER}" \
+            --repo "${REPOSITORY}" \
+            --json autoMergeRequest \
+            --jq '.autoMergeRequest != null')"
+          if [[ "${auto_merge_enabled}" == "true" ]]; then
+            gh pr merge "${PR_NUMBER}" --repo "${REPOSITORY}" --disable-auto
+          fi

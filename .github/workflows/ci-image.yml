@@ -1,0 +1,142 @@
+name: Native image verification
+
+on:
+  workflow_call:
+    inputs:
+      publish:
+        description: Push tested platform digests and their attestations to GHCR
+        required: true
+        type: boolean
+
+env:
+  IMAGE_NAME: ghcr.io/codeopsms/nginx-php-fpm
+  PUBLISH: ${{ inputs.publish }}
+
+jobs:
+  image:
+    name: image (${{ matrix.arch }})
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: amd64
+            runner: ubuntu-24.04
+          - arch: arm64
+            runner: ubuntu-24.04-arm
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 60
+    env:
+      LOCAL_IMAGE: local/nginx-php-fpm:${{ github.sha }}-${{ matrix.arch }}
+      TARGET_ARCH: ${{ matrix.arch }}
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@37fe631027851001ddb9b187196cc803df7f5f0e # v4.3.0
+
+      - name: Log in to GitHub Container Registry
+        if: inputs.publish
+        uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ github.token }}
+
+      - name: Capture build metadata
+        id: metadata
+        run: |
+          echo "created=$(date --utc +'%Y-%m-%dT%H:%M:%SZ')" >> "${GITHUB_OUTPUT}"
+          echo "version=$(<VERSION)" >> "${GITHUB_OUTPUT}"
+
+      - name: Build platform image once
+        id: build
+        uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a # v7.3.0
+        with:
+          context: .
+          platforms: linux/${{ matrix.arch }}
+          tags: ${{ env.LOCAL_IMAGE }}
+          outputs: ${{ inputs.publish && format('type=image,name={0},push-by-digest=true,name-canonical=true,push=true', env.IMAGE_NAME) || 'type=docker' }}
+          build-args: |
+            BUILD_DATE=${{ steps.metadata.outputs.created }}
+            VCS_REF=${{ github.sha }}
+            VERSION=${{ steps.metadata.outputs.version }}
+          cache-from: type=gha,scope=image-${{ matrix.arch }}
+          cache-to: type=gha,mode=max,scope=image-${{ matrix.arch }}
+          pull: true
+          no-cache: ${{ github.event_name == 'schedule' }}
+          provenance: false
+          sbom: false
+
+      - name: Select exact image under test
+        id: subject
+        env:
+          BUILT_DIGEST: ${{ steps.build.outputs.digest }}
+        run: |
+          set -Eeuo pipefail
+          mkdir -p build/platform
+          if [[ "${PUBLISH}" == "true" ]]; then
+            test -n "${BUILT_DIGEST}"
+            image_ref="${IMAGE_NAME}@${BUILT_DIGEST}"
+            docker pull "${image_ref}"
+            printf '%s\n' "${BUILT_DIGEST}" > "build/platform/digest-${TARGET_ARCH}"
+          else
+            image_ref="${LOCAL_IMAGE}"
+          fi
+          echo "image-ref=${image_ref}" >> "${GITHUB_OUTPUT}"
+
+      - name: Run native container contract suite
+        env:
+          EXPECTED_ARCH: ${{ matrix.arch }}
+          EXPECTED_REVISION: ${{ github.sha }}
+          IMAGE: ${{ steps.subject.outputs.image-ref }}
+          REQUIRE_BUILD_METADATA: "1"
+        run: make integration IMAGE="${IMAGE}" EXPECTED_ARCH="${EXPECTED_ARCH}"
+
+      - name: Scan tested image
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          image-ref: ${{ steps.subject.outputs.image-ref }}
+          format: sarif
+          output: build/platform/trivy-${{ matrix.arch }}.sarif
+          severity: HIGH,CRITICAL
+          ignore-unfixed: true
+          vuln-type: os,library
+          exit-code: "1"
+
+      - name: Generate platform SBOM
+        uses: anchore/sbom-action@e22c389904149dbc22b58101806040fa8d37a610 # v0.24.0
+        with:
+          image: ${{ steps.subject.outputs.image-ref }}
+          format: spdx-json
+          output-file: build/platform/sbom-${{ matrix.arch }}.spdx.json
+          upload-artifact: false
+          upload-release-assets: false
+
+      - name: Attest platform provenance
+        if: inputs.publish
+        uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
+        with:
+          subject-name: ${{ env.IMAGE_NAME }}
+          subject-digest: ${{ steps.build.outputs.digest }}
+          push-to-registry: true
+
+      - name: Attest platform SBOM
+        if: inputs.publish
+        uses: actions/attest-sbom@c604332985a26aa8cf1bdc465b92731239ec6b9e # v4.1.0
+        with:
+          subject-name: ${{ env.IMAGE_NAME }}
+          subject-digest: ${{ steps.build.outputs.digest }}
+          sbom-path: build/platform/sbom-${{ matrix.arch }}.spdx.json
+          push-to-registry: true
+
+      - name: Upload platform evidence
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: platform-${{ matrix.arch }}
+          path: build/platform/
+          if-no-files-found: error
+          retention-days: 14

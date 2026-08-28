@@ -1,0 +1,19 @@
+rules:
+  excessive-permissions:
+    ignore:
+      # This reusable workflow intentionally inherits its caller's explicit permission ceiling.
+      # GitHub rejects nested elevation: PR/manual callers grant only contents:read, while the
+      # push/schedule caller grants the narrowly required publication and attestation scopes.
+      - ci-image.yml
+  dangerous-triggers:
+    ignore:
+      # This privileged workflow never checks out or executes pull-request content. It accepts
+      # only GitHub's immutable numeric Dependabot bot identity (49699333), parses metadata with
+      # a commit-pinned action, and only reconciles auto-merge; the protected CI / gate remains
+      # required before GitHub can merge the pull request.
+      - dependabot-automerge.yml
+  dependabot-cooldown:
+    ignore:
+      # The approved policy deliberately uses GitHub's three-day patch/digest cooldown;
+      # minor and major updates retain longer seven- and thirty-day observation windows.
+      - dependabot.yml

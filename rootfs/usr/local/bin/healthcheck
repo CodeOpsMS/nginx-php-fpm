@@ -1,0 +1,5 @@
+#!/bin/sh
+set -eu
+
+response=$(wget -q -T 3 -Y off -O - http://127.0.0.1:8080/healthz) || exit 1
+[ "$response" = "ok" ]
