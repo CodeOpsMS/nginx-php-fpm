@@ -255,7 +255,7 @@ jobs:
   publish-main:
     name: publish tested multi-architecture image
     if: >-
-      needs.gate.result == 'success' &&
+      always() && needs.gate.result == 'success' &&
       ((github.event_name == 'push' && github.ref == 'refs/heads/main') || github.event_name == 'schedule')
     needs:
       - gate
