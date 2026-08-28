@@ -161,7 +161,7 @@ jobs:
             --tmpfs /tmp:rw,nosuid,nodev,mode=1777 \
             --user "$(id -u):$(id -g)" \
             --env HOME=/tmp \
-            --env KCOV_BASH_METHOD=PS4 \
+            --env KCOV_BASH_METHOD=DEBUG \
             --volume "${GITHUB_WORKSPACE}:${GITHUB_WORKSPACE}:ro" \
             --volume "${GITHUB_WORKSPACE}/build/coverage:${GITHUB_WORKSPACE}/build/coverage:rw" \
             --workdir "${GITHUB_WORKSPACE}" \

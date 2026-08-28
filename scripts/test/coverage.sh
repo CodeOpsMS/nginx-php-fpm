@@ -8,8 +8,8 @@ source "$SCRIPT_DIR/common.sh"
 
 ROOT=$(project_root)
 KCOV_BIN=${KCOV_BIN:-kcov}
-# Legacy macOS Bash needs DEBUG to keep trace output separate; the Linux CI
-# runner explicitly selects Kcov's PS4 method with modern BASH_XTRACEFD support.
+# Kcov v43's marker-only DEBUG transport avoids PS4 parser corruption when
+# exercised shell values contain quotes, control characters, or multiple lines.
 KCOV_BASH_METHOD=${KCOV_BASH_METHOD:-DEBUG}
 COVERAGE_DIR=${COVERAGE_DIR:-"$ROOT/build/coverage"}
 COVERAGE_THRESHOLD=${COVERAGE_THRESHOLD:-100}
