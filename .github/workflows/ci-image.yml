@@ -57,7 +57,7 @@ jobs:
         with:
           context: .
           platforms: linux/${{ matrix.arch }}
-          tags: ${{ env.LOCAL_IMAGE }}
+          tags: ${{ inputs.publish == false && env.LOCAL_IMAGE || '' }}
           outputs: ${{ inputs.publish && format('type=image,name={0},push-by-digest=true,name-canonical=true,push=true', env.IMAGE_NAME) || 'type=docker' }}
           build-args: |
             BUILD_DATE=${{ steps.metadata.outputs.created }}

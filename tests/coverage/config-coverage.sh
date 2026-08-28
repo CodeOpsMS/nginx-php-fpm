@@ -10,6 +10,7 @@ CONFIG_LIB=${CONFIG_LIB:-"$ROOT/rootfs/usr/local/lib/nginx-php-fpm/config.sh"}
 TEMPLATE_DIR=${TEMPLATE_DIR:-"$ROOT/rootfs/usr/local/share/nginx-php-fpm/templates"}
 HARNESS_TMP=$(mktemp -d "${TMPDIR:-/tmp}/nginx-php-fpm-coverage.XXXXXX")
 CAPTURE_FILE="$HARNESS_TMP/capture"
+COVERAGE_TEMPLATE_DIR="$HARNESS_TMP/templates"
 
 cleanup() {
   chmod -R u+rwX "$HARNESS_TMP" 2>/dev/null || true
@@ -98,9 +99,20 @@ rendered_checksum() {
 [[ -f $CONFIG_LIB ]] || coverage_fail "config library not found: $CONFIG_LIB"
 mkdir -p \
   "$HARNESS_TMP/document root" \
+  "$COVERAGE_TEMPLATE_DIR" \
   "$HARNESS_TMP/zoneinfo/Europe"
 : >"$HARNESS_TMP/zoneinfo/UTC"
 : >"$HARNESS_TMP/zoneinfo/Europe/Berlin"
+
+# Kcov's PS4 engine parses trace records one physical line at a time. Compact
+# fixtures exercise every renderer path and token replacement without expanding
+# the production multi-line templates into the trace stream; those templates
+# are verified by the Bats render and native image contract suites.
+compact_template='root "{{DOCUMENT_ROOT}}"; {{TZ}} {{PHP_MEMORY_LIMIT}} {{PHP_UPLOAD_MAX_FILESIZE}} {{PHP_POST_MAX_SIZE}} {{PHP_MAX_EXECUTION_TIME}} {{PHP_DISPLAY_ERRORS}} {{PHP_OPCACHE_ENABLE}} {{PHP_OPCACHE_VALIDATE_TIMESTAMPS}} {{NGINX_CLIENT_MAX_BODY_SIZE}} {{CONFIG_DIR}}'
+for template_name in nginx.conf.tpl php.ini.tpl php-fpm.conf.tpl php-fpm-pool.conf.tpl; do
+  printf '%s\n' "$compact_template" >"$COVERAGE_TEMPLATE_DIR/$template_name"
+done
+TEMPLATE_DIR=$COVERAGE_TEMPLATE_DIR
 export TEMPLATE_DIR ZONEINFO_DIR="$HARNESS_TMP/zoneinfo"
 
 # shellcheck source=rootfs/usr/local/lib/nginx-php-fpm/config.sh
@@ -136,7 +148,7 @@ expect_failure 'integer below minimum' TEST_UINT validate_uint_range TEST_UINT 0
 expect_success 'valid document root' validate_document_root "$HARNESS_TMP/document root"
 expect_failure 'relative document root' DOCUMENT_ROOT validate_document_root relative/path
 expect_failure 'control character in document root' DOCUMENT_ROOT \
-  validate_document_root "$HARNESS_TMP/"$'line\nbreak'
+  validate_document_root "$HARNESS_TMP/"$'line\tbreak'
 expect_failure 'missing document root' DOCUMENT_ROOT \
   validate_document_root "$HARNESS_TMP/missing"
 : >"$HARNESS_TMP/not-a-directory"
@@ -245,7 +257,7 @@ grep -Fq "root \"$escaped_document_root\";" "$HARNESS_TMP/special-render/nginx.c
 export DOCUMENT_ROOT="$HARNESS_TMP/document root"
 expect_failure 'relative render output' 'absolute path' render_config relative/output
 expect_failure 'control character render output' 'control characters' \
-  render_config "$HARNESS_TMP/"$'line\nbreak'
+  render_config "$HARNESS_TMP/"$'line\tbreak'
 saved_template_dir=$TEMPLATE_DIR
 TEMPLATE_DIR="$HARNESS_TMP/missing-templates"
 expect_failure 'missing template directory' 'template directory' \
