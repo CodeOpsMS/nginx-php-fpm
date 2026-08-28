@@ -21,6 +21,7 @@ RUN set -eux; \
         icu-dev \
         libjpeg-turbo-dev \
         libpng-dev \
+        libtool \
         libwebp-dev \
         libxml2-dev \
         libzip-dev \
@@ -54,7 +55,7 @@ RUN --mount=type=bind,from=pie,source=/pie,target=/usr/local/bin/pie \
         --skip-enable-extension \
         "phpredis/phpredis:${redis_version}"; \
     docker-php-ext-enable redis; \
-    php -r '$required = ["bcmath", "exif", "gd", "intl", "mbstring", "mysqli", "opcache", "pdo_mysql", "pdo_pgsql", "redis", "soap", "zip"]; foreach ($required as $extension) { if (!extension_loaded($extension)) { fwrite(STDERR, "missing extension: {$extension}\n"); exit(1); } }'
+    php -r '$required = ["bcmath", "exif", "gd", "intl", "mbstring", "mysqli", "Zend OPcache", "pdo_mysql", "pdo_pgsql", "redis", "soap", "zip"]; foreach ($required as $extension) { if (!extension_loaded($extension)) { fwrite(STDERR, "missing extension: {$extension}\n"); exit(1); } }'
 
 FROM php-base AS runtime-rootfs
 
@@ -99,7 +100,7 @@ RUN set -eux; \
         /usr/local/bin/docker-php-source \
         /usr/local/bin/php-config \
         /usr/local/bin/phpize; \
-    php -r '$required = ["bcmath", "exif", "gd", "intl", "mbstring", "mysqli", "opcache", "pdo_mysql", "pdo_pgsql", "redis", "soap", "zip"]; foreach ($required as $extension) { if (!extension_loaded($extension)) { fwrite(STDERR, "missing extension: {$extension}\n"); exit(1); } }'; \
+    php -r '$required = ["bcmath", "exif", "gd", "intl", "mbstring", "mysqli", "Zend OPcache", "pdo_mysql", "pdo_pgsql", "redis", "soap", "zip"]; foreach ($required as $extension) { if (!extension_loaded($extension)) { fwrite(STDERR, "missing extension: {$extension}\n"); exit(1); } }'; \
     test ! -e /usr/local/bin/pie; \
     for unexpected_command in composer git certbot; do \
         if command -v "${unexpected_command}" >/dev/null 2>&1; then \

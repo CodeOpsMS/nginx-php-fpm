@@ -8,12 +8,20 @@ source "$SCRIPT_DIR/common.sh"
 
 ROOT=$(project_root)
 KCOV_BIN=${KCOV_BIN:-kcov}
+# Legacy macOS Bash needs DEBUG to keep trace output separate; the Linux CI
+# runner explicitly selects Kcov's PS4 method with modern BASH_XTRACEFD support.
+KCOV_BASH_METHOD=${KCOV_BASH_METHOD:-DEBUG}
 COVERAGE_DIR=${COVERAGE_DIR:-"$ROOT/build/coverage"}
 COVERAGE_THRESHOLD=${COVERAGE_THRESHOLD:-100}
 INCLUDE_PATH=${COVERAGE_INCLUDE_PATH:-"$ROOT/rootfs/usr/local/lib/nginx-php-fpm"}
 COVERAGE_HARNESS=${COVERAGE_HARNESS:-"$ROOT/tests/coverage/config-coverage.sh"}
 
 require_command "$KCOV_BIN"
+
+case "$KCOV_BASH_METHOD" in
+  DEBUG | PS4) ;;
+  *) fail "KCOV_BASH_METHOD must be DEBUG or PS4" ;;
+esac
 
 if [[ ! $COVERAGE_THRESHOLD =~ ^[0-9]+(\.[0-9]+)?$ ]] ||
   ! awk -v threshold="$COVERAGE_THRESHOLD" 'BEGIN { exit !(threshold >= 0 && threshold <= 100) }'; then
@@ -32,7 +40,7 @@ trap cleanup_coverage_output EXIT INT TERM
 log "collecting coverage for first-party configuration logic"
 "$KCOV_BIN" \
   --clean \
-  --bash-method=DEBUG \
+  --bash-method="$KCOV_BASH_METHOD" \
   --include-path="$INCLUDE_PATH" \
   --exclude-pattern=/tests/,/templates/ \
   "$KCOV_OUTPUT" \

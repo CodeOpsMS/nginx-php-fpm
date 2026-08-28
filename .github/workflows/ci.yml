@@ -95,9 +95,13 @@ jobs:
           GITLEAKS_ENABLE_COMMENTS: "false"
           GITHUB_TOKEN: ${{ github.token }}
 
+      - name: Prepare configuration scan output
+        run: mkdir -p build
+
       - name: Scan configuration for vulnerabilities
         uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
         with:
+          version: v0.74.0
           scan-type: config
           scan-ref: .
           format: sarif
@@ -154,10 +158,10 @@ jobs:
             --read-only \
             --cap-drop ALL \
             --security-opt no-new-privileges \
-            --security-opt seccomp=unconfined \
             --tmpfs /tmp:rw,nosuid,nodev,mode=1777 \
             --user "$(id -u):$(id -g)" \
             --env HOME=/tmp \
+            --env KCOV_BASH_METHOD=PS4 \
             --volume "${GITHUB_WORKSPACE}:${GITHUB_WORKSPACE}:ro" \
             --volume "${GITHUB_WORKSPACE}/build/coverage:${GITHUB_WORKSPACE}/build/coverage:rw" \
             --workdir "${GITHUB_WORKSPACE}" \
