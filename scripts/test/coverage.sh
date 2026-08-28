@@ -8,8 +8,8 @@ source "$SCRIPT_DIR/common.sh"
 
 ROOT=$(project_root)
 KCOV_BIN=${KCOV_BIN:-kcov}
-# Kcov v43's marker-only DEBUG transport avoids PS4 parser corruption when
-# exercised shell values contain quotes, control characters, or multiple lines.
+# The marker-only DEBUG transport is insensitive to rendered configuration
+# contents. The harness leaves stderr untouched for older Bash implementations.
 KCOV_BASH_METHOD=${KCOV_BASH_METHOD:-DEBUG}
 COVERAGE_DIR=${COVERAGE_DIR:-"$ROOT/build/coverage"}
 COVERAGE_THRESHOLD=${COVERAGE_THRESHOLD:-100}
