@@ -36,9 +36,19 @@ expect_success() {
 expect_failure() {
   local description=$1
   local diagnostic=$2
+  local status
   shift 2
   : "$diagnostic"
-  if "$@" >/dev/null; then
+
+  # Bash 5.2 can still propagate errexit from a failed redirection inside a
+  # function instrumented by Kcov's DEBUG trap, even when the call is used as
+  # an if-condition. Capture expected failures with errexit explicitly disabled.
+  set +e
+  "$@" >/dev/null
+  status=$?
+  set -e
+
+  if ((status == 0)); then
     coverage_fail "$description unexpectedly succeeded"
   fi
 }

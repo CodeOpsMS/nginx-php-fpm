@@ -153,14 +153,11 @@ jobs:
         run: |
           set -Eeuo pipefail
           mkdir -p build/coverage
-          # Kcov requires ptrace/process_vm/personality syscalls. The one-shot
-          # runner remains networkless, read-only, non-root, and capability-free.
           docker run --rm \
             --network none \
             --read-only \
             --cap-drop ALL \
             --security-opt no-new-privileges \
-            --security-opt seccomp=unconfined \
             --tmpfs /tmp:rw,nosuid,nodev,mode=1777 \
             --user "$(id -u):$(id -g)" \
             --env HOME=/tmp \
