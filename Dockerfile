@@ -63,8 +63,11 @@ ARG NGINX_VERSION=1.30
 
 # Alpine package revisions intentionally float inside the pinned stable branch,
 # so daily rebuilds receive security fixes. nginx tracks the stable 1.30 line.
-# hadolint ignore=DL3018
+# Refresh every package inherited from the digest-pinned PHP base before adding
+# runtime dependencies, so rebuilds consume security fixes from Alpine stable.
+# hadolint ignore=DL3017,DL3018
 RUN set -eux; \
+    apk upgrade --no-cache; \
     apk add --no-cache \
         bash \
         freetype \

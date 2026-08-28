@@ -90,9 +90,12 @@ rendered_checksum() {
   local directory=$1
   (
     cd "$directory" || exit 1
-    find . -type f -print | LC_ALL=C sort | while IFS= read -r file; do
-      cksum "$file"
-    done
+    find . -type f -print |
+      LC_ALL=C sort |
+      while IFS= read -r file; do
+        cksum "$file"
+      done |
+      cksum
   )
 }
 
