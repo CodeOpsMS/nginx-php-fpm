@@ -315,6 +315,8 @@ printf '%s\n' \
   'header("Content-Type: text/plain");' \
   'echo "php-ok\n";' \
   'echo "uri=" . $_SERVER["REQUEST_URI"] . "\n";' \
+  'echo "path-info=" . ($_SERVER["PATH_INFO"] ?? "") . "\n";' \
+  'echo "script-name=" . $_SERVER["SCRIPT_NAME"] . "\n";' \
   'echo "memory=" . ini_get("memory_limit") . "\n";' \
   'echo "upload=" . ini_get("upload_max_filesize") . "\n";' \
   'echo "post=" . ini_get("post_max_size") . "\n";' \
@@ -400,6 +402,35 @@ missing_php_status=$(
     --write-out '%{http_code}' "$contract_url/missing.php"
 )
 assert_equal 404 "$missing_php_status" "missing PHP script response"
+
+path_info_body=$("$CURL_BIN" --fail --silent --show-error "$contract_url/index.php/deep/path?answer=42")
+assert_contains "$path_info_body" 'path-info=/deep/path' "PATH_INFO survives script existence check"
+assert_contains "$path_info_body" 'script-name=/index.php' "PATH_INFO script name"
+missing_path_info_status=$("$CURL_BIN" --silent --show-error --output /dev/null \
+  --write-out '%{http_code}' "$contract_url/missing.php/deep/path")
+assert_equal 404 "$missing_path_info_status" "missing PHP script with PATH_INFO"
+
+log "checking alternate non-root identity and writable PHP temporary paths"
+# Real NFS applications can require a numeric UID/GID other than www-data.
+alternate_container="$RUN_PREFIX-alternate-user"
+start_container "$alternate_container" --user 1000:101
+wait_for_container_http "$alternate_container" >/dev/null
+assert_equal 1000 "$("$DOCKER_BIN" exec "$alternate_container" id -u)" "alternate runtime uid"
+assert_equal 101 "$("$DOCKER_BIN" exec "$alternate_container" id -g)" "alternate runtime gid"
+# PHP variables below are evaluated inside the container.
+# shellcheck disable=SC2016
+"$DOCKER_BIN" exec "$alternate_container" php -r '
+  $path = tempnam(sys_get_temp_dir(), "npfm-test-");
+  if ($path === false || file_put_contents($path, "temporary-ok") === false) exit(1);
+  if (file_get_contents($path) !== "temporary-ok") exit(1);
+  unlink($path);
+  session_id("npfm-integration");
+  if (!session_start()) exit(1);
+  $_SESSION["contract"] = "session-ok";
+  session_write_close();
+  if (!session_start() || ($_SESSION["contract"] ?? "") !== "session-ok") exit(1);
+  session_destroy();
+'
 
 nginx_config=$(
   "$DOCKER_BIN" exec "$contract_container" nginx \

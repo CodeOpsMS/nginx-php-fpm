@@ -20,7 +20,14 @@ All notable changes to this project are documented in this file. The format foll
 
 ### Changed
 
+- Pin the available official PHP 8.5.10 multi-architecture image for release validation.
+- Verify alternate non-root UID/GID execution and PHP temporary file/session persistence.
+- Allow explicit CI candidate publication for external application validation before merge.
 - The project is a from-scratch implementation and is not configuration-compatible with the
   legacy `richarvey/nginx-php-fpm` image.
+
+### Fixed
+
+- Preserve `PATH_INFO` for existing PHP scripts while retaining HTTP 404 for missing scripts.
 
 [Unreleased]: https://github.com/CodeOpsMS/nginx-php-fpm/commits/main

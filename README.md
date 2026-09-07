@@ -10,9 +10,9 @@ The upcoming `0.4.0` release is a clean implementation inspired by
 [`richarvey/nginx-php-fpm`](https://github.com/richarvey/nginx-php-fpm). It does not copy the
 legacy implementation and is intentionally not configuration-compatible with it.
 
-> **Release status:** `0.4.0` is intentionally not published yet. The tested `main` preview
-> bootstraps from the current official PHP 8.5.9 image; the release workflow requires the
-> official stable PHP 8.5.10 image before it can publish `0.4.0`.
+> **Release status:** `0.4.0` is undergoing application validation. The base is pinned to
+> the official stable PHP 8.5.10 image. A successful image build alone does not establish
+> compatibility with applications migrating from the legacy image.
 
 ## What is included
 
@@ -66,6 +66,13 @@ docker run --rm \
 Every directory in the mounted path must be searchable by UID 82, and files must be readable
 by UID 82. If the application writes data, give UID/GID 82 access only to dedicated writable
 volumes; do not make the application tree broadly writable.
+
+Existing NFS data may require a different non-root identity. Set Docker `--user 1000:101`
+or Kubernetes `securityContext.runAsUser: 1000` and `runAsGroup: 101` to match the data's
+existing ownership. The image keeps its default `82:82` identity and never changes volume
+ownership. Legacy `PUID`, `PGID`, `SKIP_CHOWN`, and `/start.sh` are not supported.
+Give the selected identity a writable `/tmp`; keep application-specific writable directories
+on separate volumes. Services and probes must target port 8080.
 
 ## Runtime contract
 
@@ -178,6 +185,11 @@ make integration IMAGE=nginx-php-fpm:test
 
 `make coverage` enforces 100% line coverage for the instrumentable first-party configuration
 logic. See [CONTRIBUTING.md](CONTRIBUTING.md) for tool requirements and pull-request policy.
+
+For external application testing before merge, maintainers can dispatch `CI` on a review
+branch with `publish_candidates=true`. Download the `platform-amd64` and `platform-arm64`
+artifacts after the full run succeeds and use their exact `digest-*` references. This mode
+publishes digest candidates and attestations without moving `main` or any release tag.
 
 ## Automated maintenance
 
