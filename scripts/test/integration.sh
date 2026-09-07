@@ -493,5 +493,8 @@ assert_managed_service_failure nginx KILL nginx
 
 logs=$("$DOCKER_BIN" logs "$contract_container" 2>&1)
 assert_contains "$logs" '/healthz' "HTTP access log on stdout/stderr"
+if [[ $logs == *'env[CONTRACT_FPM_DROPIN]'* ]]; then
+  fail "startup logs must not dump PHP-FPM environment configuration"
+fi
 
 log "all integration checks passed for $IMAGE ($image_arch)"

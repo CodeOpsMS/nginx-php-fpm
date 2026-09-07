@@ -6,17 +6,16 @@
 
 A production-focused, rootless nginx and PHP-FPM container for `linux/amd64` and `linux/arm64`.
 
-The upcoming `0.4.0` release is a clean implementation inspired by
+The `0.4.0` release is a clean implementation inspired by
 [`richarvey/nginx-php-fpm`](https://github.com/richarvey/nginx-php-fpm). It does not copy the
 legacy implementation and is intentionally not configuration-compatible with it.
 
-> **Release status:** `0.4.0` is undergoing application validation. The base is pinned to
-> the official stable PHP 8.5.10 image. A successful image build alone does not establish
-> compatibility with applications migrating from the legacy image.
+The base is pinned to the official stable PHP 8.5.10 image. Applications migrating from
+the legacy image need the runtime and path changes described below.
 
 ## What is included
 
-- PHP 8.5 FPM on Alpine 3.24 (`0.4.0` is gated on PHP 8.5.10)
+- PHP 8.5.10 FPM on Alpine 3.24
 - nginx from Alpine's stable 1.30.x line (1.30.4 at the initial release)
 - Tini as PID 1 and a small supervisor for nginx and PHP-FPM
 - PHP extensions: OPcache, bcmath, exif, GD (FreeType, JPEG, and WebP), intl, mbstring,
@@ -31,7 +30,7 @@ reverse proxy or ingress.
 
 ## Quick start
 
-Until `0.4.0` is published, use the rolling `main` preview for evaluation:
+Run the release with a read-only root filesystem:
 
 ```console
 docker run --rm \
@@ -40,7 +39,7 @@ docker run --rm \
   --cap-drop ALL \
   --security-opt no-new-privileges \
   -p 8080:8080 \
-  ghcr.io/codeopsms/nginx-php-fpm:main
+  ghcr.io/codeopsms/nginx-php-fpm:0.4.0
 ```
 
 Open <http://localhost:8080> or check readiness with:
@@ -60,7 +59,7 @@ docker run --rm \
   --mount type=bind,src="$PWD/public",dst=/srv/app,readonly \
   -e DOCUMENT_ROOT=/srv/app \
   -p 8080:8080 \
-  ghcr.io/codeopsms/nginx-php-fpm:main
+  ghcr.io/codeopsms/nginx-php-fpm:0.4.0
 ```
 
 Every directory in the mounted path must be searchable by UID 82, and files must be readable
@@ -84,7 +83,8 @@ denied. nginx and PHP version headers are disabled, and the default page never e
 
 Configuration is validated before either service starts. Invalid values produce a diagnostic
 on stderr and a non-zero container exit. The generated configuration is written atomically
-beneath `/tmp/nginx-php-fpm`, then checked with `nginx -t` and `php-fpm -tt`.
+beneath `/tmp/nginx-php-fpm`, then checked with `nginx -t` and `php-fpm -t`.
+The PHP-FPM check does not dump configured environment values into startup logs.
 
 ### Environment variables
 
@@ -162,7 +162,7 @@ docker pull ghcr.io/codeopsms/nginx-php-fpm@sha256:<manifest-digest>
 
 ## Supply-chain verification
 
-After `0.4.0` is published, install the [GitHub CLI](https://cli.github.com/) and verify the
+Install the [GitHub CLI](https://cli.github.com/) and verify the
 image's GitHub artifact attestation against this repository:
 
 ```console

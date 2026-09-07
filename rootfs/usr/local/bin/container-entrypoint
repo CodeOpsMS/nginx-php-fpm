@@ -11,7 +11,8 @@ validate_rendered_config() {
   local candidate=${1:?candidate directory is required}
   local scan_dirs="/usr/local/etc/php/conf.d:${candidate}/php/conf.d:/etc/php/conf.d"
 
-  PHP_INI_SCAN_DIR=$scan_dirs php-fpm -tt -y "$candidate/php-fpm.conf"
+  # Validate without dumping env[] drop-ins, which can contain credentials.
+  PHP_INI_SCAN_DIR=$scan_dirs php-fpm -t -y "$candidate/php-fpm.conf"
   nginx -t -c "$candidate/nginx.conf"
 }
 
