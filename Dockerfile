@@ -1,10 +1,8 @@
 # syntax=docker/dockerfile:1.26.0@sha256:ecfaec9ed6d810b56388c508f4121597bfbba70d41a6dfeee4d8cad5f295fc32
 
-# PHP 8.5.10 is not available from the official image registry yet. The
-# release workflow refuses to publish 0.4.0 until this literal bootstrap pin
-# has been updated. Literal references keep both images visible to Dependabot.
+# Literal references keep both images visible to Dependabot.
 FROM ghcr.io/php/pie:bin@sha256:edb7cf2c03e26a2afc91fc4abdafdf7d7528ca4674ccb532310d81f1adc949c5 AS pie
-FROM php:8.5.9-fpm-alpine3.24@sha256:9dc81f4086ea5402227a6bcc489b04b4baba12394624d9621faa92ed812fb8ee AS php-base
+FROM php:8.5.10-fpm-alpine3.24@sha256:22a4c414bb8e91ac7aefe9b1d80e832caa67252aca58b6af7eeb3bc92188fc5b AS php-base
 
 FROM php-base AS extension-builder
 

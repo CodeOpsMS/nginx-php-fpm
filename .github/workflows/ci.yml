@@ -8,6 +8,11 @@ on:
     branches:
       - main
   workflow_dispatch:
+    inputs:
+      publish_candidates:
+        description: Publish tested platform digests for external application validation
+        type: boolean
+        default: false
   schedule:
     - cron: "17 3 * * *"
 
@@ -194,7 +199,7 @@ jobs:
 
   image-readonly:
     name: verify images without publication
-    if: github.event_name == 'pull_request' || github.event_name == 'workflow_dispatch'
+    if: github.event_name == 'pull_request' || (github.event_name == 'workflow_dispatch' && !inputs.publish_candidates)
     uses: ./.github/workflows/ci-image.yml
     with:
       publish: false
@@ -205,7 +210,8 @@ jobs:
     name: verify and publish image candidates
     if: >-
       (github.event_name == 'push' && github.ref == 'refs/heads/main') ||
-      github.event_name == 'schedule'
+      github.event_name == 'schedule' ||
+      (github.event_name == 'workflow_dispatch' && inputs.publish_candidates)
     uses: ./.github/workflows/ci-image.yml
     with:
       publish: true
@@ -233,14 +239,24 @@ jobs:
           READONLY_IMAGE_RESULT: ${{ needs.image-readonly.result }}
           LINT_RESULT: ${{ needs.lint.result }}
           SOURCE_RESULT: ${{ needs.source-tests.result }}
+          PUBLISH_CANDIDATES: ${{ inputs.publish_candidates }}
         run: |
           set -Eeuo pipefail
           test "${LINT_RESULT}" = success
           test "${SOURCE_RESULT}" = success
           case "${EVENT_NAME}" in
-            pull_request | workflow_dispatch)
+            pull_request)
               test "${READONLY_IMAGE_RESULT}" = success
               test "${PUBLISH_IMAGE_RESULT}" = skipped
+              ;;
+            workflow_dispatch)
+              if [[ "${PUBLISH_CANDIDATES}" == "true" ]]; then
+                test "${READONLY_IMAGE_RESULT}" = skipped
+                test "${PUBLISH_IMAGE_RESULT}" = success
+              else
+                test "${READONLY_IMAGE_RESULT}" = success
+                test "${PUBLISH_IMAGE_RESULT}" = skipped
+              fi
               ;;
             push | schedule)
               test "${READONLY_IMAGE_RESULT}" = skipped

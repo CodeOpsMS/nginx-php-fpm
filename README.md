@@ -6,17 +6,16 @@
 
 A production-focused, rootless nginx and PHP-FPM container for `linux/amd64` and `linux/arm64`.
 
-The upcoming `0.4.0` release is a clean implementation inspired by
+The `0.4.0` release is a clean implementation inspired by
 [`richarvey/nginx-php-fpm`](https://github.com/richarvey/nginx-php-fpm). It does not copy the
 legacy implementation and is intentionally not configuration-compatible with it.
 
-> **Release status:** `0.4.0` is intentionally not published yet. The tested `main` preview
-> bootstraps from the current official PHP 8.5.9 image; the release workflow requires the
-> official stable PHP 8.5.10 image before it can publish `0.4.0`.
+The base is pinned to the official stable PHP 8.5.10 image. Applications migrating from
+the legacy image need the runtime and path changes described below.
 
 ## What is included
 
-- PHP 8.5 FPM on Alpine 3.24 (`0.4.0` is gated on PHP 8.5.10)
+- PHP 8.5.10 FPM on Alpine 3.24
 - nginx from Alpine's stable 1.30.x line (1.30.4 at the initial release)
 - Tini as PID 1 and a small supervisor for nginx and PHP-FPM
 - PHP extensions: OPcache, bcmath, exif, GD (FreeType, JPEG, and WebP), intl, mbstring,
@@ -31,7 +30,7 @@ reverse proxy or ingress.
 
 ## Quick start
 
-Until `0.4.0` is published, use the rolling `main` preview for evaluation:
+Run the release with a read-only root filesystem:
 
 ```console
 docker run --rm \
@@ -40,7 +39,7 @@ docker run --rm \
   --cap-drop ALL \
   --security-opt no-new-privileges \
   -p 8080:8080 \
-  ghcr.io/codeopsms/nginx-php-fpm:main
+  ghcr.io/codeopsms/nginx-php-fpm:0.4.0
 ```
 
 Open <http://localhost:8080> or check readiness with:
@@ -60,12 +59,19 @@ docker run --rm \
   --mount type=bind,src="$PWD/public",dst=/srv/app,readonly \
   -e DOCUMENT_ROOT=/srv/app \
   -p 8080:8080 \
-  ghcr.io/codeopsms/nginx-php-fpm:main
+  ghcr.io/codeopsms/nginx-php-fpm:0.4.0
 ```
 
 Every directory in the mounted path must be searchable by UID 82, and files must be readable
 by UID 82. If the application writes data, give UID/GID 82 access only to dedicated writable
 volumes; do not make the application tree broadly writable.
+
+Existing NFS data may require a different non-root identity. Set Docker `--user 1000:101`
+or Kubernetes `securityContext.runAsUser: 1000` and `runAsGroup: 101` to match the data's
+existing ownership. The image keeps its default `82:82` identity and never changes volume
+ownership. Legacy `PUID`, `PGID`, `SKIP_CHOWN`, and `/start.sh` are not supported.
+Give the selected identity a writable `/tmp`; keep application-specific writable directories
+on separate volumes. Services and probes must target port 8080.
 
 ## Runtime contract
 
@@ -77,7 +83,8 @@ denied. nginx and PHP version headers are disabled, and the default page never e
 
 Configuration is validated before either service starts. Invalid values produce a diagnostic
 on stderr and a non-zero container exit. The generated configuration is written atomically
-beneath `/tmp/nginx-php-fpm`, then checked with `nginx -t` and `php-fpm -tt`.
+beneath `/tmp/nginx-php-fpm`, then checked with `nginx -t` and `php-fpm -t`.
+The PHP-FPM check does not dump configured environment values into startup logs.
 
 ### Environment variables
 
@@ -143,6 +150,10 @@ Release tags are assembled only from platform digests that completed the same na
 suite and vulnerability scan. The release index contains exactly `linux/amd64` and
 `linux/arm64`; 32-bit x86 is not supported.
 
+Release preparation and publication are separate manual steps. Validate the prepared digests
+with the consuming application before publishing; the publication step verifies and reuses
+those exact images. See the [release procedure](CONTRIBUTING.md#releases).
+
 For production, pin the manifest digest shown in the GitHub release:
 
 ```console
@@ -151,7 +162,7 @@ docker pull ghcr.io/codeopsms/nginx-php-fpm@sha256:<manifest-digest>
 
 ## Supply-chain verification
 
-After `0.4.0` is published, install the [GitHub CLI](https://cli.github.com/) and verify the
+Install the [GitHub CLI](https://cli.github.com/) and verify the
 image's GitHub artifact attestation against this repository:
 
 ```console
@@ -178,6 +189,11 @@ make integration IMAGE=nginx-php-fpm:test
 
 `make coverage` enforces 100% line coverage for the instrumentable first-party configuration
 logic. See [CONTRIBUTING.md](CONTRIBUTING.md) for tool requirements and pull-request policy.
+
+For external application testing before merge, maintainers can dispatch `CI` on a review
+branch with `publish_candidates=true`. Download the `platform-amd64` and `platform-arm64`
+artifacts after the full run succeeds and use their exact `digest-*` references. This mode
+publishes digest candidates and attestations without moving `main` or any release tag.
 
 ## Automated maintenance
 

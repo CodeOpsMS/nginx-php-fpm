@@ -55,6 +55,14 @@ for automatic squash merge after CI; PHP 8.6 or newer and major updates require 
 ## Releases
 
 Releases are created only through the manual `Release` workflow on the current `main` commit.
-The workflow validates prior CI, builds each architecture once, tests and scans the exact
-digests, creates the multi-architecture index, publishes attestations and SBOMs, and finally
-creates the matching Git tag and GitHub release. Never move a full SemVer image or Git tag.
+First dispatch it with `publish_release=false` (the default). The workflow validates prior CI,
+builds each architecture once, tests and scans the exact digests, and publishes candidate
+attestations and SBOMs. Download the `release-amd64` and `release-arm64` artifacts from that
+successful run and test the `digest-*` image references with the consuming application.
+
+After application validation, dispatch the same workflow on the same main commit with that
+`candidate_run_id` and `publish_release=true`. It verifies the preparation run and signed
+provenance, retests and rescans the same digests without rebuilding, creates the
+multi-architecture index, and publishes the matching Git tag and GitHub release. A changed
+main commit requires a new preparation and application test. Never move a full SemVer image
+or Git tag.

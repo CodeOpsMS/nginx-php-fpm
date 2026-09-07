@@ -56,11 +56,13 @@ http {
         }
 
         location ~ \.php(?:/|$) {
+            fastcgi_split_path_info ^(.+\.php)(/.+)$;
+            # try_files changes the URI and resets $fastcgi_path_info.
+            set $saved_path_info $fastcgi_path_info;
             try_files $fastcgi_script_name =404;
             include /etc/nginx/fastcgi_params;
-            fastcgi_split_path_info ^(.+\.php)(/.+)$;
             fastcgi_param SCRIPT_FILENAME $document_root$fastcgi_script_name;
-            fastcgi_param PATH_INFO $fastcgi_path_info;
+            fastcgi_param PATH_INFO $saved_path_info;
             fastcgi_pass unix:/tmp/nginx-php-fpm/run/php-fpm.sock;
         }
     }

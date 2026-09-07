@@ -8,6 +8,14 @@ on:
         required: true
         default: 0.4.0
         type: string
+      candidate_run_id:
+        description: Successful Release preparation run whose exact digests were application-tested
+        default: ""
+        type: string
+      publish_release:
+        description: Publish the prepared and application-tested digests as the immutable release
+        default: false
+        type: boolean
 
 concurrency:
   group: release
@@ -42,12 +50,27 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           REQUESTED_VERSION: ${{ inputs.version }}
+          CANDIDATE_RUN_ID: ${{ inputs.candidate_run_id }}
+          PUBLISH_RELEASE: ${{ inputs.publish_release }}
         run: |
           set -Eeuo pipefail
           [[ "${GITHUB_REF}" == "refs/heads/main" ]]
           [[ "${REQUESTED_VERSION}" =~ ^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$ ]]
           test "$(<VERSION)" = "${REQUESTED_VERSION}"
           test "$(git rev-parse origin/main)" = "${GITHUB_SHA}"
+          if [[ "${PUBLISH_RELEASE}" == "true" ]]; then
+            [[ "${CANDIDATE_RUN_ID}" =~ ^[1-9][0-9]*$ ]]
+          fi
+          if [[ -n "${CANDIDATE_RUN_ID}" ]]; then
+            [[ "${CANDIDATE_RUN_ID}" =~ ^[1-9][0-9]*$ ]]
+            gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${CANDIDATE_RUN_ID}" \
+              --jq '{head_sha,head_branch,event,path,status,conclusion}' > "${RUNNER_TEMP}/candidate-run.json"
+            jq --exit-status --arg sha "${GITHUB_SHA}" \
+              '.head_sha == $sha and .head_branch == "main" and
+               .event == "workflow_dispatch" and .path == ".github/workflows/release.yml" and
+               .status == "completed" and .conclusion == "success"' \
+              "${RUNNER_TEMP}/candidate-run.json"
+          fi
           tag_ref="$(git ls-remote --tags origin "refs/tags/${REQUESTED_VERSION}" | awk '{ print $1 }')"
           if [[ -n "${tag_ref}" ]]; then
             test "$(git rev-list -n 1 "${REQUESTED_VERSION}")" = "${GITHUB_SHA}"
@@ -94,6 +117,7 @@ jobs:
     runs-on: ${{ matrix.runner }}
     timeout-minutes: 60
     permissions:
+      actions: read # Retrieve exact digests from the validated preparation run.
       attestations: write # Publish GitHub artifact attestations for each tested platform digest.
       contents: read
       id-token: write # Obtain the OIDC identity used to sign attestations.
@@ -120,10 +144,19 @@ jobs:
         id: existing
         env:
           RELEASE_VERSION: ${{ needs.validate.outputs.version }}
+          CANDIDATE_RUN_ID: ${{ inputs.candidate_run_id }}
+          GH_TOKEN: ${{ github.token }}
         run: |
           set -Eeuo pipefail
           existing_index="${RUNNER_TEMP}/existing-release-index.json"
-          if docker buildx imagetools inspect "${IMAGE_NAME}:${RELEASE_VERSION}" --raw > "${existing_index}" 2>/dev/null; then
+          if [[ -n "${CANDIDATE_RUN_ID}" ]]; then
+            gh run download "${CANDIDATE_RUN_ID}" --repo "${GITHUB_REPOSITORY}" \
+              --name "release-${TARGET_ARCH}" --dir "${RUNNER_TEMP}/prepared-candidate"
+            digest="$(cat "${RUNNER_TEMP}/prepared-candidate/digest-${TARGET_ARCH}")"
+            [[ "${digest}" =~ ^sha256:[0-9a-f]{64}$ ]]
+            echo "digest=${digest}" >> "${GITHUB_OUTPUT}"
+            echo "reuse=true" >> "${GITHUB_OUTPUT}"
+          elif docker buildx imagetools inspect "${IMAGE_NAME}:${RELEASE_VERSION}" --raw > "${existing_index}" 2>/dev/null; then
             jq --exit-status \
               '[.manifests[].platform | "\(.os)/\(.architecture)"] | sort == ["linux/amd64", "linux/arm64"]' \
               "${existing_index}"
@@ -255,6 +288,7 @@ jobs:
 
   publish:
     name: publish immutable release
+    if: inputs.publish_release
     needs:
       - validate
       - image
