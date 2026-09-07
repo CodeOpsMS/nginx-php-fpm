@@ -23,6 +23,8 @@ All notable changes to this project are documented in this file. The format foll
 - Pin the available official PHP 8.5.10 multi-architecture image for release validation.
 - Verify alternate non-root UID/GID execution and PHP temporary file/session persistence.
 - Allow explicit CI candidate publication for external application validation before merge.
+- Separate release preparation from publication so application-tested digests are promoted
+  without a rebuild.
 - The project is a from-scratch implementation and is not configuration-compatible with the
   legacy `richarvey/nginx-php-fpm` image.
 

@@ -150,6 +150,10 @@ Release tags are assembled only from platform digests that completed the same na
 suite and vulnerability scan. The release index contains exactly `linux/amd64` and
 `linux/arm64`; 32-bit x86 is not supported.
 
+Release preparation and publication are separate manual steps. Validate the prepared digests
+with the consuming application before publishing; the publication step verifies and reuses
+those exact images. See the [release procedure](CONTRIBUTING.md#releases).
+
 For production, pin the manifest digest shown in the GitHub release:
 
 ```console
