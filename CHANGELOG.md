@@ -6,6 +6,16 @@ All notable changes to this project are documented in this file. The format foll
 
 ## [Unreleased]
 
+### Changed
+
+- Describe the CodeOpsMS runtime directly and refresh the repository maintenance checklist
+  for ongoing operation after the first stable release.
+
+### Removed
+
+- References to the predecessor project, its startup settings, and unreleased version lines
+  from the project documentation.
+
 ## [0.4.0] - 2026-09-07
 
 ### Added
@@ -27,8 +37,8 @@ All notable changes to this project are documented in this file. The format foll
 - Allow explicit CI candidate publication for external application validation before merge.
 - Separate release preparation from publication so application-tested digests are promoted
   without a rebuild.
-- The project is a from-scratch implementation and is not configuration-compatible with the
-  legacy `richarvey/nginx-php-fpm` image.
+- Use the image entrypoint, container runtime user settings, dedicated writable volumes,
+  and port 8080 when deploying applications.
 
 ### Fixed
 

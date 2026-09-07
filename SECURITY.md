@@ -7,7 +7,6 @@ Only the latest release line receives security updates.
 | Version | Supported |
 | --- | --- |
 | `0.4.x` | Yes |
-| `< 0.4` | No |
 
 The moving `main` image is a preview of the current default branch and is not a supported
 release channel. Production deployments should pin a released image digest.
