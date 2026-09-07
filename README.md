@@ -6,12 +6,9 @@
 
 A production-focused, rootless nginx and PHP-FPM container for `linux/amd64` and `linux/arm64`.
 
-The `0.4.0` release is a clean implementation inspired by
-[`richarvey/nginx-php-fpm`](https://github.com/richarvey/nginx-php-fpm). It does not copy the
-legacy implementation and is intentionally not configuration-compatible with it.
-
-The base is pinned to the official stable PHP 8.5.10 image. Applications migrating from
-the legacy image need the runtime and path changes described below.
+Maintained by CodeOpsMS, the `0.4.0` release is pinned to the official stable PHP 8.5.10
+image. Configure applications using the runtime identity, volume paths, and port described
+below.
 
 ## What is included
 
@@ -69,7 +66,7 @@ volumes; do not make the application tree broadly writable.
 Existing NFS data may require a different non-root identity. Set Docker `--user 1000:101`
 or Kubernetes `securityContext.runAsUser: 1000` and `runAsGroup: 101` to match the data's
 existing ownership. The image keeps its default `82:82` identity and never changes volume
-ownership. Legacy `PUID`, `PGID`, `SKIP_CHOWN`, and `/start.sh` are not supported.
+ownership. Use the image's built-in entrypoint to start nginx and PHP-FPM.
 Give the selected identity a writable `/tmp`; keep application-specific writable directories
 on separate volumes. Services and probes must target port 8080.
 
