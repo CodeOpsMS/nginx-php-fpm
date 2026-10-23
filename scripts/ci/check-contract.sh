@@ -24,6 +24,8 @@ required_files=(
   rootfs/usr/local/share/nginx-php-fpm/templates/php-fpm-pool.conf.tpl
   rootfs/var/www/html/index.php
   README.md
+  SECURITY.md
+  VERSION
 )
 
 contract_variables=(
@@ -42,6 +44,12 @@ contract_variables=(
 for relative_path in "${required_files[@]}"; do
   [[ -f $ROOT/$relative_path ]] || fail "required source file is missing: $relative_path"
 done
+
+release_version=$(tr -d '[:space:]' <"$ROOT/VERSION")
+# Markdown backticks are literal, not shell command substitutions.
+# shellcheck disable=SC2016
+printf -v expected_support_line '| `%s.x` | Yes |' "${release_version%.*}"
+grep -Fxq -- "$expected_support_line" "$ROOT/SECURITY.md" || fail "SECURITY.md must support the current release line ${release_version%.*}.x"
 
 for variable in "${contract_variables[@]}"; do
   grep -q -- "$variable" "$CONFIG_LIB" || fail "$variable is missing from config.sh"

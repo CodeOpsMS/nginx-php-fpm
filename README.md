@@ -4,11 +4,25 @@
 [![Release](https://img.shields.io/github/v/release/CodeOpsMS/nginx-php-fpm?display_name=tag)](https://github.com/CodeOpsMS/nginx-php-fpm/releases)
 [![Package](https://img.shields.io/badge/GHCR-nginx--php--fpm-blue)](https://github.com/CodeOpsMS/nginx-php-fpm/pkgs/container/nginx-php-fpm)
 
-A production-focused, rootless nginx and PHP-FPM container for `linux/amd64` and `linux/arm64`.
+Maintained nginx and PHP-FPM Docker image with rootless execution, multi-platform builds,
+and verified releases for `linux/amd64` and `linux/arm64`.
 
-Maintained by CodeOpsMS, the `0.5.0` release is pinned to the official stable PHP 8.5.12
+The `0.5.0` release is pinned to the official stable PHP 8.5.12
 image. Configure applications using the runtime identity, volume paths, and port described
 below.
+
+**Start here:** [Docker Compose example](examples/compose/README.md) ·
+[Migrate from richarvey/nginx-php-fpm](docs/migrating-from-richarvey.md) ·
+[Migration walkthrough](docs/articles/migrating-to-a-maintained-php-container.md) ·
+[Ask a question](https://github.com/CodeOpsMS/nginx-php-fpm/discussions)
+
+| Stable release | PHP | nginx | Alpine | Published |
+| --- | --- | --- | --- | --- |
+| [0.5.0](https://github.com/CodeOpsMS/nginx-php-fpm/releases/tag/0.5.0) | 8.5.12 | 1.30.6 | 3.24.3 | 2026-10-23 |
+
+The release includes native integration tests, SPDX SBOMs for both architectures, and
+verifiable provenance. See the [maintenance policy](docs/maintenance.md) for security
+updates and the distinction between stable releases and the rolling `main` preview.
 
 ## What is included
 
@@ -26,6 +40,17 @@ headers, arbitrary startup hooks, and source synchronization. Terminate TLS and 
 reverse proxy or ingress.
 
 ## Quick start
+
+For a complete application example, run this from a checkout of the repository:
+
+```console
+docker compose --file examples/compose/compose.yaml up --detach --wait
+curl --fail http://localhost:8080/hello
+```
+
+The example mounts a small PHP application read-only, binds HTTP to localhost, and uses
+the image's PHP-backed healthcheck. See its [README](examples/compose/README.md) for
+configuration and shutdown commands.
 
 Run the release with a read-only root filesystem:
 
@@ -182,6 +207,7 @@ make test
 make coverage
 docker build --tag nginx-php-fpm:test .
 make integration IMAGE=nginx-php-fpm:test
+make examples IMAGE=nginx-php-fpm:test
 ```
 
 `make coverage` enforces 100% line coverage for the instrumentable first-party configuration
@@ -204,6 +230,18 @@ check succeeds. PHP 8.6 or newer and all major updates require maintainer review
 The scheduled CI rebuild updates only `main`, allowing Alpine security updates to reach the
 rolling image after the same amd64/arm64 test matrix. Versioned release tags are never rebuilt
 or overwritten.
+
+## Community and adoption
+
+Use [Discussions](https://github.com/CodeOpsMS/nginx-php-fpm/discussions) for questions
+and ideas. For a concrete migration problem, open a
+[migration help request](https://github.com/CodeOpsMS/nginx-php-fpm/issues/new?template=migration-help.yml).
+If you have tried the image, share an
+[adoption report](https://github.com/CodeOpsMS/nginx-php-fpm/issues/new?template=adoption-report.yml)
+with the version, architecture, and what worked or needed changes.
+
+The [adoption guide](docs/adoption.md) explains how reports become documented migration
+examples and how maintainers measure interest without treating image pulls as active users.
 
 ## License
 

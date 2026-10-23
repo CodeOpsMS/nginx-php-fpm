@@ -1,0 +1,47 @@
+name: Adoption report
+description: Share a trial or migration result to improve examples and compatibility guidance.
+title: "[Adoption] "
+labels: [adoption]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thank you for sharing what you actually tested. A local trial is useful too.
+        This report is public; omit credentials, private infrastructure details, and personal data.
+  - type: input
+    id: image
+    attributes:
+      label: Image tag or manifest digest
+    validations:
+      required: true
+  - type: input
+    id: application
+    attributes:
+      label: Application/framework and architecture
+      placeholder: Application version and amd64 or arm64
+    validations:
+      required: true
+  - type: dropdown
+    id: environment
+    attributes:
+      label: Where did you try it?
+      options: [Local experiment, Staging, Production]
+    validations:
+      required: true
+  - type: textarea
+    id: result
+    attributes:
+      label: What worked and what needed changes?
+      description: Mention any previous image, configuration changes, writable paths, and tests run.
+    validations:
+      required: true
+  - type: textarea
+    id: documentation
+    attributes:
+      label: What should the documentation explain better?
+  - type: checkboxes
+    id: case-study
+    attributes:
+      label: Optional case-study permission
+      options:
+        - label: You may link this public report from the project documentation as a migration example, with attribution to my GitHub username.

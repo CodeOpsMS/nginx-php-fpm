@@ -6,6 +6,21 @@ All notable changes to this project are documented in this file. The format foll
 
 ## [Unreleased]
 
+### Added
+
+- A migration guide from richarvey/nginx-php-fpm, a public migration walkthrough,
+  and a complete rootless, read-only Docker Compose application example.
+- Native CI and release verification of the checked-in Compose example.
+- GitHub migration-help and adoption-report forms, a community onboarding guide,
+  and a local GitHub traffic/adoption reporting command.
+
+### Changed
+
+- Improve README navigation, positioning, release evidence, and community entry points.
+- Correct the supported security release line to 0.5.x and document immutable
+  security patch releases and the daily main preview policy.
+- Check that the security policy supports the current release line during source validation.
+
 ## [0.5.0] - 2026-10-23
 
 ### Changed
