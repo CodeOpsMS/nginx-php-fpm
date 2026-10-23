@@ -22,7 +22,7 @@ Protect `main` with a branch ruleset that:
 - applies to administrators unless an audited emergency bypass is required.
 
 Protect tags matching `*.*.*` from update and deletion. Full SemVer tags must
-remain immutable; only the container aliases `0`, `0.4`, `latest`, and `main` may move.
+remain immutable; only the container aliases `0`, `0.5`, `latest`, and `main` may move.
 
 ## Security and Actions
 
