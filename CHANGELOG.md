@@ -6,8 +6,24 @@ All notable changes to this project are documented in this file. The format foll
 
 ## [Unreleased]
 
+## [0.5.0] - 2026-10-23
+
 ### Changed
 
+- Upgrade the official PHP image from 8.5.10 to 8.5.12 on Alpine 3.24, retaining
+  native amd64 and arm64 support and refreshing Alpine runtime security updates.
+- Consume nginx 1.30.6 from Alpine's stable 1.30 package line.
+- Refresh the build-only PHP PIE image to 1.5.3 and the Dockerfile frontend to 1.28.0,
+  with immutable manifest digests.
+- Update Buildx setup to 4.4.1, Docker build/push to 7.4.0, artifact upload/download
+  to 7.0.2/8.0.2, and SBOM generation to 0.24.3, retaining full commit pins.
+- Update shfmt to 3.14.1 with its verified checksum, Trivy to 0.76.1, and zizmor
+  to 1.31.1 with zizmor-action 0.7.1.
+- Document two scoped zizmor self-repository audit exceptions while stable
+  actionlint 1.7.12 lacks support for GitHub's new `$/` workflow syntax. The
+  existing local reusable workflows continue to resolve at the caller's commit.
+- Refresh release defaults, validation, integration expectations, and usage examples
+  for version 0.5.0. Redis remains at the current stable extension release 6.3.0.
 - Describe the CodeOpsMS runtime directly and refresh the repository maintenance checklist
   for ongoing operation after the first stable release.
 
@@ -45,5 +61,6 @@ All notable changes to this project are documented in this file. The format foll
 - Preserve `PATH_INFO` for existing PHP scripts while retaining HTTP 404 for missing scripts.
 - Validate PHP-FPM configuration without exposing configured environment values in logs.
 
-[Unreleased]: https://github.com/CodeOpsMS/nginx-php-fpm/compare/0.4.0...HEAD
+[Unreleased]: https://github.com/CodeOpsMS/nginx-php-fpm/compare/0.5.0...HEAD
+[0.5.0]: https://github.com/CodeOpsMS/nginx-php-fpm/releases/tag/0.5.0
 [0.4.0]: https://github.com/CodeOpsMS/nginx-php-fpm/releases/tag/0.4.0

@@ -33,8 +33,8 @@ redis_pin=$(
     "$ROOT/container/extensions/composer.json" | head -n 1
 )
 
-EXPECTED_PHP_VERSION=${EXPECTED_PHP_VERSION:-${detected_php_version:-8.5.10}}
-EXPECTED_NGINX_VERSION=${EXPECTED_NGINX_VERSION:-$(dockerfile_arg NGINX_VERSION 1.30.4)}
+EXPECTED_PHP_VERSION=${EXPECTED_PHP_VERSION:-${detected_php_version:-8.5.12}}
+EXPECTED_NGINX_VERSION=${EXPECTED_NGINX_VERSION:-$(dockerfile_arg NGINX_VERSION 1.30.6)}
 EXPECTED_ALPINE_SERIES=${EXPECTED_ALPINE_SERIES:-${detected_alpine_series:-3.24}}
 EXPECTED_REDIS_SERIES=${EXPECTED_REDIS_SERIES:-${redis_pin:-6.3.0}}
 

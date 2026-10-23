@@ -6,14 +6,14 @@
 
 A production-focused, rootless nginx and PHP-FPM container for `linux/amd64` and `linux/arm64`.
 
-Maintained by CodeOpsMS, the `0.4.0` release is pinned to the official stable PHP 8.5.10
+Maintained by CodeOpsMS, the `0.5.0` release is pinned to the official stable PHP 8.5.12
 image. Configure applications using the runtime identity, volume paths, and port described
 below.
 
 ## What is included
 
-- PHP 8.5.10 FPM on Alpine 3.24
-- nginx from Alpine's stable 1.30.x line (1.30.4 at the initial release)
+- PHP 8.5.12 FPM on Alpine 3.24
+- nginx from Alpine's stable 1.30.x line (1.30.6 at release 0.5.0)
 - Tini as PID 1 and a small supervisor for nginx and PHP-FPM
 - PHP extensions: OPcache, bcmath, exif, GD (FreeType, JPEG, and WebP), intl, mbstring,
   mysqli, PDO MySQL, PDO PostgreSQL, Redis 6.3, soap, and zip
@@ -36,7 +36,7 @@ docker run --rm \
   --cap-drop ALL \
   --security-opt no-new-privileges \
   -p 8080:8080 \
-  ghcr.io/codeopsms/nginx-php-fpm:0.4.0
+  ghcr.io/codeopsms/nginx-php-fpm:0.5.0
 ```
 
 Open <http://localhost:8080> or check readiness with:
@@ -56,7 +56,7 @@ docker run --rm \
   --mount type=bind,src="$PWD/public",dst=/srv/app,readonly \
   -e DOCUMENT_ROOT=/srv/app \
   -p 8080:8080 \
-  ghcr.io/codeopsms/nginx-php-fpm:0.4.0
+  ghcr.io/codeopsms/nginx-php-fpm:0.5.0
 ```
 
 Every directory in the mounted path must be searchable by UID 82, and files must be readable
@@ -138,8 +138,8 @@ add_header Referrer-Policy "strict-origin-when-cross-origin" always;
 
 | Tag | Movement policy |
 | --- | --- |
-| `0.4.0` | Immutable release |
-| `0.4`, `0`, `latest` | Move to the newest compatible release |
+| `0.5.0` | Immutable release |
+| `0.5`, `0`, `latest` | Move to the newest compatible release |
 | `sha-<full-commit>` | Immutable image built from a successful push to `main` |
 | `main` | Moves after successful pushes and daily fully tested rebuilds |
 
@@ -164,7 +164,7 @@ image's GitHub artifact attestation against this repository:
 
 ```console
 gh attestation verify \
-  oci://ghcr.io/codeopsms/nginx-php-fpm:0.4.0 \
+  oci://ghcr.io/codeopsms/nginx-php-fpm:0.5.0 \
   --repo CodeOpsMS/nginx-php-fpm
 ```
 
