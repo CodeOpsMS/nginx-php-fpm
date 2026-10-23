@@ -33,10 +33,21 @@ Build and exercise the actual container:
 ```console
 docker build --tag nginx-php-fpm:test .
 make integration IMAGE=nginx-php-fpm:test
+make examples IMAGE=nginx-php-fpm:test
 ```
 
 `make verify IMAGE=nginx-php-fpm:test` runs the complete local suite. Coverage for the
 instrumentable first-party configuration library must remain at 100%.
+
+`make examples` starts the checked-in Compose application against the selected image and
+checks health, front-controller routing, static files, rootless execution, and read-only
+mounts. It needs Docker Compose v2, curl, and Python 3 and runs natively in both image CI
+jobs and release candidate verification.
+
+Documentation entry points are indexed in [docs/README.md](docs/README.md). Keep the
+stable release table, security support line, and example image references current when
+preparing a new release. Follow [docs/adoption.md](docs/adoption.md) when collecting
+feedback or publishing a migration case study.
 
 ## Pull requests
 

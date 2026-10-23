@@ -1,0 +1,45 @@
+name: Migration help
+description: Get help moving an application to the CodeOpsMS nginx/PHP-FPM image.
+title: "[Migration] "
+labels: [migration]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Please read the [migration guide](https://github.com/CodeOpsMS/nginx-php-fpm/blob/main/docs/migrating-from-richarvey.md) first.
+        This is a public report: remove credentials, personal data, and private hostnames from configuration and logs.
+        Use the private security reporting process for suspected vulnerabilities.
+  - type: input
+    id: image
+    attributes:
+      label: Image tag or manifest digest
+      placeholder: ghcr.io/codeopsms/nginx-php-fpm:0.5.0
+    validations:
+      required: true
+  - type: dropdown
+    id: architecture
+    attributes:
+      label: Architecture
+      options: [amd64, arm64, Unknown]
+    validations:
+      required: true
+  - type: input
+    id: application
+    attributes:
+      label: Application/framework and deployment environment
+      placeholder: Application version, Docker Compose or Kubernetes, host OS
+    validations:
+      required: true
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Minimal configuration and reproduction
+      description: Include the selected UID/GID, relevant mounts, and document root.
+    validations:
+      required: true
+  - type: textarea
+    id: behavior
+    attributes:
+      label: Expected behavior, actual behavior, and relevant logs
+    validations:
+      required: true

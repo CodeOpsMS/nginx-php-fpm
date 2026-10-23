@@ -8,6 +8,8 @@ build
 dist
 reports
 tests
+docs
+examples
 *.log
 *.md
 !VERSION

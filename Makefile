@@ -5,7 +5,7 @@ COVERAGE_THRESHOLD ?= 100
 
 .DEFAULT_GOAL := test
 
-.PHONY: lint contract test test-unit coverage integration verify
+.PHONY: lint contract test test-unit coverage integration examples adoption-report verify
 
 lint: contract
 	@./scripts/ci/lint.sh
@@ -24,4 +24,10 @@ coverage:
 integration:
 	@./scripts/test/integration.sh "$(IMAGE)"
 
-verify: lint test coverage integration
+examples:
+	@./scripts/test/examples.sh "$(IMAGE)"
+
+adoption-report:
+	@python3 ./scripts/maintenance/adoption-report.py
+
+verify: lint test coverage integration examples
