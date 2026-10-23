@@ -19,6 +19,9 @@ All notable changes to this project are documented in this file. The format foll
   to 7.0.2/8.0.2, and SBOM generation to 0.24.3, retaining full commit pins.
 - Update shfmt to 3.14.1 with its verified checksum, Trivy to 0.76.1, and zizmor
   to 1.31.1 with zizmor-action 0.7.1.
+- Document two scoped zizmor self-repository audit exceptions while stable
+  actionlint 1.7.12 lacks support for GitHub's new `$/` workflow syntax. The
+  existing local reusable workflows continue to resolve at the caller's commit.
 - Refresh release defaults, validation, integration expectations, and usage examples
   for version 0.5.0. Redis remains at the current stable extension release 6.3.0.
 - Describe the CodeOpsMS runtime directly and refresh the repository maintenance checklist
