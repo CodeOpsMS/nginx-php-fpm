@@ -30,6 +30,8 @@ All notable changes to this project are documented in this file. The format foll
 - Send nginx bootstrap errors directly to stderr, avoiding permission warnings for
   the system error-log path when running rootless with a read-only filesystem.
 - Keep the optional PHP-FPM include glob valid when no application fragments are mounted.
+- Preserve the configured HIGH/CRITICAL security threshold when Trivy writes SARIF;
+  the action otherwise resets the severity filter and fails on lower-severity findings.
 
 ## [0.5.0] - 2026-10-23
 
