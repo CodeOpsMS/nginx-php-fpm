@@ -99,7 +99,10 @@ on separate volumes. Services and probes must target port 8080.
 
 The image listens on `8080/tcp`, serves `/var/www/html` by default, and writes nginx access
 logs to stdout and nginx/PHP errors to stderr. Requests that do not resolve to a static file
-or directory are sent to `index.php` as a front controller. Dotfiles, including `.git`, are
+or directory are sent to `index.php` as a front controller. Set `NGINX_FRONT_CONTROLLER=0`
+to return HTTP 404 for these requests instead (available after release 0.5.0).
+Existing PHP scripts, directory indexes, and `/healthz` continue to work in either mode.
+Dotfiles, including `.git`, are
 denied. nginx and PHP version headers are disabled, and the default page never exposes
 `phpinfo()`.
 
@@ -122,9 +125,18 @@ The PHP-FPM check does not dump configured environment values into startup logs.
 | `PHP_OPCACHE_ENABLE` | `1` | `0` or `1` |
 | `PHP_OPCACHE_VALIDATE_TIMESTAMPS` | `0` | `0` or `1` |
 | `NGINX_CLIENT_MAX_BODY_SIZE` | `64m` | `0` or a positive integer with optional `k`/`K`, `m`/`M`, or `g`/`G` suffix |
+| `NGINX_FRONT_CONTROLLER` | `1` | `1` routes missing files/directories to `index.php`; `0` returns HTTP 404 (after 0.5.0) |
 
 `PHP_POST_MAX_SIZE` and `NGINX_CLIENT_MAX_BODY_SIZE` should normally be at least as large as
 `PHP_UPLOAD_MAX_FILESIZE`.
+
+`GDFONTPATH` can be passed through to PHP for applications that load TrueType fonts by
+relative name. Set it to the absolute directory containing the application's fonts, for
+example `/var/www/html`. Prefer absolute font paths in application code. This is a GD
+setting, not a generated image default; see the
+[PHP font-path reference](https://www.php.net/manual/en/function.imagettftext.php).
+For Kubernetes permissions, port mappings, and probes, see the
+[Kubernetes migration example](examples/kubernetes/README.md).
 
 ### Configuration drop-ins
 

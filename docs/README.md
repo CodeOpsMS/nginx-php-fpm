@@ -1,6 +1,7 @@
 # Documentation
 
 - [Start a PHP application with Docker Compose](../examples/compose/README.md)
+- [Start a PHP application on Kubernetes](../examples/kubernetes/README.md)
 - [Migrate from richarvey/nginx-php-fpm](migrating-from-richarvey.md)
 - [Worked migration: move to a maintained rootless PHP container](articles/migrating-to-a-maintained-php-container.md)
 - [Maintenance and security updates](maintenance.md)

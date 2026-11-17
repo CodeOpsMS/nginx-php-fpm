@@ -8,6 +8,10 @@ All notable changes to this project are documented in this file. The format foll
 
 ### Added
 
+- Optional `NGINX_FRONT_CONTROLLER=0` routing for applications that require HTTP 404
+  for unknown URLs, with native amd64/arm64 integration regression checks.
+- Kubernetes migration example covering port 8080, rootless volume permissions,
+  supplemental groups, and application-specific GD font paths.
 - A migration guide from richarvey/nginx-php-fpm, a public migration walkthrough,
   and a complete rootless, read-only Docker Compose application example.
 - Native CI and release verification of the checked-in Compose example.
@@ -20,6 +24,14 @@ All notable changes to this project are documented in this file. The format foll
 - Correct the supported security release line to 0.5.x and document immutable
   security patch releases and the daily main preview policy.
 - Check that the security policy supports the current release line during source validation.
+
+### Fixed
+
+- Send nginx bootstrap errors directly to stderr, avoiding permission warnings for
+  the system error-log path when running rootless with a read-only filesystem.
+- Keep the optional PHP-FPM include glob valid when no application fragments are mounted.
+- Preserve the configured HIGH/CRITICAL security threshold when Trivy writes SARIF;
+  the action otherwise resets the severity filter and fails on lower-severity findings.
 
 ## [0.5.0] - 2026-10-23
 

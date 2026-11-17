@@ -165,6 +165,7 @@ ENV PATH="/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin" \
     PHP_OPCACHE_ENABLE="1" \
     PHP_OPCACHE_VALIDATE_TIMESTAMPS="0" \
     NGINX_CLIENT_MAX_BODY_SIZE="64m" \
+    NGINX_FRONT_CONTROLLER="1" \
     PHP_INI_SCAN_DIR="/usr/local/etc/php/conf.d:/tmp/nginx-php-fpm/current/php/conf.d:/etc/php/conf.d"
 
 USER 82:82

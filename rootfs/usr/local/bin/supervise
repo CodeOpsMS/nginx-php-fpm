@@ -37,7 +37,7 @@ trap 'request_shutdown TERM' INT
 php-fpm --nodaemonize --fpm-config "$CONFIG_DIR/php-fpm.conf" &
 php_fpm_pid=$!
 
-nginx -c "$CONFIG_DIR/nginx.conf" -g 'daemon off;' &
+nginx -e stderr -c "$CONFIG_DIR/nginx.conf" -g 'daemon off;' &
 nginx_pid=$!
 
 set +e

@@ -305,6 +305,13 @@ if grep -Eiq '^X-Powered-By:' <<<"$default_headers"; then
   fail "PHP version header is exposed"
 fi
 
+default_logs=$("$DOCKER_BIN" logs "$default_container" 2>&1)
+for startup_warning in 'could not open error log file' 'Nothing matches the include pattern'; do
+  if [[ $default_logs == *"$startup_warning"* ]]; then
+    fail "default startup emitted a configuration warning: $startup_warning"
+  fi
+done
+
 log "checking document root, front controller, environment and drop-in precedence"
 mkdir -p "$WORK_DIR/app" "$WORK_DIR/dropins"
 chmod 0755 "$WORK_DIR" "$WORK_DIR/app" "$WORK_DIR/dropins"
@@ -410,6 +417,32 @@ missing_path_info_status=$("$CURL_BIN" --silent --show-error --output /dev/null 
   --write-out '%{http_code}' "$contract_url/missing.php/deep/path")
 assert_equal 404 "$missing_path_info_status" "missing PHP script with PATH_INFO"
 
+log "checking optional 404 routing for applications without a front controller"
+strict_container="$RUN_PREFIX-strict-routes"
+start_container "$strict_container" \
+  --mount "type=bind,src=$WORK_DIR/app,dst=/srv/contract-app,readonly" \
+  -e DOCUMENT_ROOT=/srv/contract-app \
+  -e NGINX_FRONT_CONTROLLER=0
+strict_url=$(wait_for_container_http "$strict_container")
+"$CURL_BIN" --fail --silent --show-error "$strict_url/" >/dev/null
+strict_asset=$("$CURL_BIN" --fail --silent --show-error "$strict_url/asset.txt")
+assert_equal 'static-contract-ok' "$strict_asset" "static file with front controller disabled"
+strict_path_info=$("$CURL_BIN" --fail --silent --show-error "$strict_url/index.php/deep/path?answer=42")
+assert_contains "$strict_path_info" 'path-info=/deep/path' "PATH_INFO with front controller disabled"
+for missing_path in '/deep/front-controller?answer=42' /missing.php /missing.php/deep/path /asset.txt/missing; do
+  missing_status=$("$CURL_BIN" --silent --show-error --output /dev/null \
+    --write-out '%{http_code}' "$strict_url$missing_path")
+  assert_equal 404 "$missing_status" "strict routing for $missing_path"
+done
+for protected_path in /.env /.git/config /.hidden.php; do
+  protected_status=$("$CURL_BIN" --silent --show-error --output /dev/null \
+    --write-out '%{http_code}' "$strict_url$protected_path")
+  case "$protected_status" in
+    403 | 404) ;;
+    *) fail "strict routing exposed protected path $protected_path (HTTP $protected_status)" ;;
+  esac
+done
+
 log "checking alternate non-root identity and writable PHP temporary paths"
 # Real NFS applications can require a numeric UID/GID other than www-data.
 alternate_container="$RUN_PREFIX-alternate-user"
@@ -433,7 +466,7 @@ assert_equal 101 "$("$DOCKER_BIN" exec "$alternate_container" id -g)" "alternate
 '
 
 nginx_config=$(
-  "$DOCKER_BIN" exec "$contract_container" nginx \
+  "$DOCKER_BIN" exec "$contract_container" nginx -e stderr \
     -T -c /tmp/nginx-php-fpm/current/nginx.conf 2>&1
 )
 assert_contains "$nginx_config" 'client_max_body_size 17m;' "nginx body-size override"
@@ -458,6 +491,7 @@ invalid_pairs=(
   'PHP_OPCACHE_ENABLE=2'
   'PHP_OPCACHE_VALIDATE_TIMESTAMPS=-1'
   'NGINX_CLIENT_MAX_BODY_SIZE=many'
+  'NGINX_FRONT_CONTROLLER=2'
 )
 for pair in "${invalid_pairs[@]}"; do
   variable=${pair%%=*}

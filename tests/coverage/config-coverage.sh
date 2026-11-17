@@ -73,7 +73,7 @@ clear_contract_environment() {
   unset DOCUMENT_ROOT TZ PHP_MEMORY_LIMIT PHP_UPLOAD_MAX_FILESIZE
   unset PHP_POST_MAX_SIZE PHP_MAX_EXECUTION_TIME PHP_DISPLAY_ERRORS
   unset PHP_OPCACHE_ENABLE PHP_OPCACHE_VALIDATE_TIMESTAMPS
-  unset NGINX_CLIENT_MAX_BODY_SIZE
+  unset NGINX_CLIENT_MAX_BODY_SIZE NGINX_FRONT_CONTROLLER
 }
 
 set_valid_environment() {
@@ -87,6 +87,7 @@ set_valid_environment() {
   export PHP_OPCACHE_ENABLE=0
   export PHP_OPCACHE_VALIDATE_TIMESTAMPS=1
   export NGINX_CLIENT_MAX_BODY_SIZE=192m
+  export NGINX_FRONT_CONTROLLER=0
 }
 
 [[ -f $CONFIG_LIB ]] || coverage_fail "config library not found: $CONFIG_LIB"
@@ -101,7 +102,7 @@ mkdir -p \
 # fixtures exercise every renderer path and token replacement without expanding
 # the production multi-line templates into the trace stream; those templates
 # are verified by the Bats render and native image contract suites.
-compact_template='root "{{DOCUMENT_ROOT}}"; {{TZ}} {{PHP_MEMORY_LIMIT}} {{PHP_UPLOAD_MAX_FILESIZE}} {{PHP_POST_MAX_SIZE}} {{PHP_MAX_EXECUTION_TIME}} {{PHP_DISPLAY_ERRORS}} {{PHP_OPCACHE_ENABLE}} {{PHP_OPCACHE_VALIDATE_TIMESTAMPS}} {{NGINX_CLIENT_MAX_BODY_SIZE}} {{CONFIG_DIR}}'
+compact_template='root "{{DOCUMENT_ROOT}}"; {{TZ}} {{PHP_MEMORY_LIMIT}} {{PHP_UPLOAD_MAX_FILESIZE}} {{PHP_POST_MAX_SIZE}} {{PHP_MAX_EXECUTION_TIME}} {{PHP_DISPLAY_ERRORS}} {{PHP_OPCACHE_ENABLE}} {{PHP_OPCACHE_VALIDATE_TIMESTAMPS}} {{NGINX_CLIENT_MAX_BODY_SIZE}} {{NGINX_FALLBACK}} {{CONFIG_DIR}}'
 for template_name in nginx.conf.tpl php.ini.tpl php-fpm.conf.tpl php-fpm-pool.conf.tpl; do
   printf '%s\n' "$compact_template" >"$COVERAGE_TEMPLATE_DIR/$template_name"
 done
@@ -185,6 +186,7 @@ assert_equal 'default display errors' 0 "$PHP_DISPLAY_ERRORS"
 assert_equal 'default opcache' 1 "$PHP_OPCACHE_ENABLE"
 assert_equal 'default opcache timestamps' 0 "$PHP_OPCACHE_VALIDATE_TIMESTAMPS"
 assert_equal 'default nginx body size' 64m "$NGINX_CLIENT_MAX_BODY_SIZE"
+assert_equal 'default front controller' 1 "$NGINX_FRONT_CONTROLLER"
 eval "$saved_document_validator"
 
 clear_contract_environment
@@ -192,6 +194,7 @@ set_valid_environment
 expect_success 'valid configuration overrides' validate_config
 assert_equal 'memory override' 512M "$PHP_MEMORY_LIMIT"
 assert_equal 'nginx override' 192m "$NGINX_CLIENT_MAX_BODY_SIZE"
+assert_equal 'front controller override' 0 "$NGINX_FRONT_CONTROLLER"
 export -p | grep -q 'PHP_MEMORY_LIMIT' || coverage_fail 'validated variables were not exported'
 
 invalid_pairs=(
@@ -205,6 +208,7 @@ invalid_pairs=(
   'PHP_OPCACHE_ENABLE=2'
   'PHP_OPCACHE_VALIDATE_TIMESTAMPS=-1'
   'NGINX_CLIENT_MAX_BODY_SIZE=many'
+  'NGINX_FRONT_CONTROLLER=2'
 )
 for pair in "${invalid_pairs[@]}"; do
   clear_contract_environment
@@ -233,6 +237,11 @@ if grep -R -Fq '{{' "$HARNESS_TMP/rendered"; then
   coverage_fail 'rendered configuration contains unresolved template tokens'
 fi
 expect_success 'idempotent render' render_config "$HARNESS_TMP/rendered"
+export NGINX_FRONT_CONTROLLER=0
+expect_success 'strict route render' render_config "$HARNESS_TMP/strict-render"
+grep -Fq '=404' "$HARNESS_TMP/strict-render/nginx.conf" ||
+  coverage_fail 'strict route fallback was not rendered'
+export NGINX_FRONT_CONTROLLER=1
 
 mkdir -p "$HARNESS_TMP/path with \\$ and \"quote\""
 export DOCUMENT_ROOT="$HARNESS_TMP/path with \\$ and \"quote\""
@@ -260,6 +269,7 @@ expect_failure 'render validation failure' PHP_DISPLAY_ERRORS \
 export RENDER_DOCUMENT_ROOT=/srv/app
 export RENDER_TZ=UTC
 export RENDER_CONFIG_DIR=/tmp/config
+export RENDER_NGINX_FALLBACK='=404'
 export PHP_MEMORY_LIMIT=256M
 export PHP_UPLOAD_MAX_FILESIZE=64M
 export PHP_POST_MAX_SIZE=64M

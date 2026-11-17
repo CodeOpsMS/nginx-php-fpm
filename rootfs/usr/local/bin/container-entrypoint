@@ -13,7 +13,7 @@ validate_rendered_config() {
 
   # Validate without dumping env[] drop-ins, which can contain credentials.
   PHP_INI_SCAN_DIR=$scan_dirs php-fpm -t -y "$candidate/php-fpm.conf"
-  nginx -t -c "$candidate/nginx.conf"
+  nginx -e stderr -t -c "$candidate/nginx.conf"
 }
 
 activate_config() {

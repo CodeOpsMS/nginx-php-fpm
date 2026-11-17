@@ -39,6 +39,7 @@ contract_variables=(
   PHP_OPCACHE_ENABLE
   PHP_OPCACHE_VALIDATE_TIMESTAMPS
   NGINX_CLIENT_MAX_BODY_SIZE
+  NGINX_FRONT_CONTROLLER
 )
 
 for relative_path in "${required_files[@]}"; do

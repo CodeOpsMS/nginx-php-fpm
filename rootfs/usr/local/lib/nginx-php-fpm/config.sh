@@ -131,6 +131,7 @@ validate_config() {
   PHP_OPCACHE_ENABLE=${PHP_OPCACHE_ENABLE-1}
   PHP_OPCACHE_VALIDATE_TIMESTAMPS=${PHP_OPCACHE_VALIDATE_TIMESTAMPS-0}
   NGINX_CLIENT_MAX_BODY_SIZE=${NGINX_CLIENT_MAX_BODY_SIZE-64m}
+  NGINX_FRONT_CONTROLLER=${NGINX_FRONT_CONTROLLER-1}
 
   validate_document_root "$DOCUMENT_ROOT" || return 1
   validate_timezone "$TZ" || return 1
@@ -142,11 +143,12 @@ validate_config() {
   validate_bool PHP_OPCACHE_ENABLE "$PHP_OPCACHE_ENABLE" || return 1
   validate_bool PHP_OPCACHE_VALIDATE_TIMESTAMPS "$PHP_OPCACHE_VALIDATE_TIMESTAMPS" || return 1
   validate_nginx_size NGINX_CLIENT_MAX_BODY_SIZE "$NGINX_CLIENT_MAX_BODY_SIZE" || return 1
+  validate_bool NGINX_FRONT_CONTROLLER "$NGINX_FRONT_CONTROLLER" || return 1
 
   export DOCUMENT_ROOT TZ PHP_MEMORY_LIMIT PHP_UPLOAD_MAX_FILESIZE
   export PHP_POST_MAX_SIZE PHP_MAX_EXECUTION_TIME PHP_DISPLAY_ERRORS
   export PHP_OPCACHE_ENABLE PHP_OPCACHE_VALIDATE_TIMESTAMPS
-  export NGINX_CLIENT_MAX_BODY_SIZE
+  export NGINX_CLIENT_MAX_BODY_SIZE NGINX_FRONT_CONTROLLER
 }
 
 render_template() {
@@ -164,6 +166,7 @@ render_template() {
   content=$(replace_literal_token "$content" '{{PHP_OPCACHE_ENABLE}}' "$PHP_OPCACHE_ENABLE")
   content=$(replace_literal_token "$content" '{{PHP_OPCACHE_VALIDATE_TIMESTAMPS}}' "$PHP_OPCACHE_VALIDATE_TIMESTAMPS")
   content=$(replace_literal_token "$content" '{{NGINX_CLIENT_MAX_BODY_SIZE}}' "$NGINX_CLIENT_MAX_BODY_SIZE")
+  content=$(replace_literal_token "$content" '{{NGINX_FALLBACK}}' "$RENDER_NGINX_FALLBACK")
   content=$(replace_literal_token "$content" '{{CONFIG_DIR}}' "$RENDER_CONFIG_DIR")
   # DOCUMENT_ROOT is the only public string that can contain template-like
   # text. Render it last so its contents are never interpreted as tokens.
@@ -205,6 +208,12 @@ render_config() {
   RENDER_DOCUMENT_ROOT=$(escape_nginx_string "$DOCUMENT_ROOT")
   RENDER_TZ=$(escape_ini_string "$TZ")
   RENDER_CONFIG_DIR=$(escape_ini_string "$output_dir")
+  # nginx, not Bash, expands the query-string variable.
+  # shellcheck disable=SC2016
+  RENDER_NGINX_FALLBACK='/index.php?$query_string'
+  if [[ $NGINX_FRONT_CONTROLLER == 0 ]]; then
+    RENDER_NGINX_FALLBACK='=404'
+  fi
 
   umask 027
   mkdir -p "$output_dir/php/conf.d"
@@ -213,5 +222,5 @@ render_config() {
   render_template "$template_dir/php-fpm.conf.tpl" "$output_dir/php-fpm.conf" || return 1
   render_template "$template_dir/php-fpm-pool.conf.tpl" "$output_dir/php-fpm-pool.conf" || return 1
 
-  unset RENDER_DOCUMENT_ROOT RENDER_TZ RENDER_CONFIG_DIR
+  unset RENDER_DOCUMENT_ROOT RENDER_TZ RENDER_CONFIG_DIR RENDER_NGINX_FALLBACK
 }

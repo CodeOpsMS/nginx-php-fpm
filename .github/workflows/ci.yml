@@ -112,6 +112,7 @@ jobs:
           format: sarif
           output: build/trivy-config.sarif
           severity: HIGH,CRITICAL
+          limit-severities-for-sarif: true
           ignore-unfixed: false
           exit-code: "1"
 
