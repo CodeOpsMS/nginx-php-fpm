@@ -9,6 +9,8 @@ The legacy settings below refer to the
 [richarvey configuration reference](https://github.com/richarvey/nginx-php-fpm/blob/15f577b1877c27b5830cb9c23ddff00fa2289ba3/docs/config_flags.md).
 The examples target CodeOpsMS release
 [0.5.0](https://github.com/CodeOpsMS/nginx-php-fpm/releases/tag/0.5.0).
+`NGINX_FRONT_CONTROLLER`, described below, is available in builds after 0.5.0;
+use a tested image digest from `main` until a release includes it.
 
 ## Map the runtime settings
 
@@ -21,7 +23,7 @@ The examples target CodeOpsMS release
 | `PHP_UPLOAD_MAX_FILESIZE`, `PHP_POST_MAX_SIZE` | Same names; review defaults and validation in the runtime reference |
 | `ERRORS=1` | `PHP_DISPLAY_ERRORS=1`; leave `0` in production |
 | `OPcache` | `PHP_OPCACHE_ENABLE=1` enables OPcache; `0` disables it |
-| `PHP_CATCHALL` | Requests that are not existing files/directories use `index.php` by default; test your application's routes |
+| `PHP_CATCHALL` | Requests that are not existing files/directories use `index.php` by default; in builds after 0.5.0, set `NGINX_FRONT_CONTROLLER=0` for HTTP 404 instead |
 | `HIDE_NGINX_HEADERS` | nginx/PHP version headers are disabled by default |
 | `PHP_ERRORS_STDERR` | Error logs go to stderr; nginx access logs go to stdout |
 | `PUID`, `PGID` | Docker `--user UID:GID`, Compose `user: "UID:GID"`, or Kubernetes `runAsUser`/`runAsGroup`; default is `82:82` |
@@ -51,6 +53,15 @@ Composer, Git, Certbot, Xdebug, MongoDB, xsl, the non-PDO pgsql extension, and n
 modules are outside the supported image contract. If your application needs another
 extension or nginx module, establish that requirement before migrating. An application's
 existing use of a bundled legacy feature is not covered by changing the image name.
+
+Check image generation as well as extension availability. GD may need an explicit font
+search directory when legacy code passes a bare filename such as `captcha.ttf` to
+`imagettftext()`. Prefer an absolute application path, for example
+`__DIR__ . '/captcha.ttf'`. When changing the application is impractical, set
+`GDFONTPATH=/var/www/html` to the existing, readable font directory. The PHP-FPM pool
+inherits this environment variable. Test that captcha/image endpoints still return
+their intended content type and valid JSON or image data; an HTTP 200 alone does not
+prove success. Keep `PHP_DISPLAY_ERRORS=0` in production and inspect stderr for warnings.
 
 ## Convert a Compose service
 
@@ -101,6 +112,51 @@ data directories. For a different existing data owner, add `user: "1000:101"` an
 permissions for that identity. Keep `/tmp` writable. Default PHP temporary files and
 sessions live there and are ephemeral; choose an application-specific persistent session
 store if sessions must survive container replacement.
+
+## Convert a Kubernetes deployment
+
+The [Kubernetes example](../examples/kubernetes/README.md) includes a Deployment, an
+internal Service, and a small read-only application. Its container listens on `8080`,
+the Service uses `targetPort: http` for that named container port, and startup,
+readiness, and liveness probes call `/healthz`. Give `/tmp` a writable volume when
+`readOnlyRootFilesystem: true` is set.
+
+Prepare mounted-data permissions for the selected identity before changing the image.
+For an existing application tree owned by `100:101`, one option is
+`runAsUser: 100` and `runAsGroup: 101`, provided that identity can read the application
+and write only the intended data directories. Alternatively, provision targeted ACLs
+or permissions for the default `82:82`. The container does not change PVC ownership.
+
+A separate read-only share owned by `1000:1000` with directory mode `750` needs group
+access even when the application itself is readable. For that case, add the share's
+numeric group to the Pod security context:
+
+```yaml
+spec:
+  template:
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 82
+        runAsGroup: 82
+        supplementalGroups: [1000]
+```
+
+Use the actual group and verify search permission on parent directories and read
+permission on required files. Keep the share's `volumeMounts[].readOnly` enabled.
+`supplementalGroups` adds a process group; it does not change stored ownership. Do not
+add `fsGroup` or recursively change a shared PVC merely to obtain read access.
+
+## Preserve missing-route behavior
+
+The default front controller sends unknown URLs to `/index.php`. If an older
+file-based application returns HTTP 404 for those URLs, enable its matching behavior
+with `NGINX_FRONT_CONTROLLER=0` in a build after 0.5.0. Existing PHP scripts, static
+files, directories, and `/healthz` remain available. Applications using routes such as
+`/login` or `/account/123` through `index.php` should keep the default `1`.
+
+Include a nonexistent path in the old/new response comparison: a redirect to a login
+page or a successful home page response can conceal a routing difference.
 
 ## Move custom configuration
 

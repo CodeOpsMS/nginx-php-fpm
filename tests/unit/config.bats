@@ -24,6 +24,7 @@ set_valid_environment() {
   export PHP_OPCACHE_ENABLE=0
   export PHP_OPCACHE_VALIDATE_TIMESTAMPS=1
   export NGINX_CLIENT_MAX_BODY_SIZE=192m
+  export NGINX_FRONT_CONTROLLER=0
 }
 
 @test "validate_config applies production defaults" {
@@ -43,6 +44,7 @@ set_valid_environment() {
   [[ $PHP_OPCACHE_ENABLE == 1 ]]
   [[ $PHP_OPCACHE_VALIDATE_TIMESTAMPS == 0 ]]
   [[ $NGINX_CLIENT_MAX_BODY_SIZE == 64m ]]
+  [[ $NGINX_FRONT_CONTROLLER == 1 ]]
 }
 
 @test "validate_config preserves valid overrides" {
@@ -59,6 +61,7 @@ set_valid_environment() {
   [[ $PHP_OPCACHE_ENABLE == 0 ]]
   [[ $PHP_OPCACHE_VALIDATE_TIMESTAMPS == 1 ]]
   [[ $NGINX_CLIENT_MAX_BODY_SIZE == 192m ]]
+  [[ $NGINX_FRONT_CONTROLLER == 0 ]]
 }
 
 @test "validate_config reports the invalid variable" {
@@ -74,6 +77,7 @@ set_valid_environment() {
     'PHP_OPCACHE_ENABLE=2'
     'PHP_OPCACHE_VALIDATE_TIMESTAMPS=-1'
     'NGINX_CLIENT_MAX_BODY_SIZE=many'
+    'NGINX_FRONT_CONTROLLER=2'
   )
 
   for pair in "${invalid_pairs[@]}"; do
@@ -97,7 +101,7 @@ set_valid_environment() {
     "$DOCUMENT_ROOT" "$TZ" "$PHP_MEMORY_LIMIT" "$PHP_UPLOAD_MAX_FILESIZE" \
     "$PHP_POST_MAX_SIZE" "$PHP_MAX_EXECUTION_TIME" "$PHP_DISPLAY_ERRORS" \
     "$PHP_OPCACHE_ENABLE" "$PHP_OPCACHE_VALIDATE_TIMESTAMPS" \
-    "$NGINX_CLIENT_MAX_BODY_SIZE" | cksum)
+    "$NGINX_CLIENT_MAX_BODY_SIZE" "$NGINX_FRONT_CONTROLLER" | cksum)
 
   validate_config
   local second
@@ -105,7 +109,7 @@ set_valid_environment() {
     "$DOCUMENT_ROOT" "$TZ" "$PHP_MEMORY_LIMIT" "$PHP_UPLOAD_MAX_FILESIZE" \
     "$PHP_POST_MAX_SIZE" "$PHP_MAX_EXECUTION_TIME" "$PHP_DISPLAY_ERRORS" \
     "$PHP_OPCACHE_ENABLE" "$PHP_OPCACHE_VALIDATE_TIMESTAMPS" \
-    "$NGINX_CLIENT_MAX_BODY_SIZE" | cksum)
+    "$NGINX_CLIENT_MAX_BODY_SIZE" "$NGINX_FRONT_CONTROLLER" | cksum)
 
   [[ $first == "$second" ]]
 }

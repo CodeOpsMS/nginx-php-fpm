@@ -76,6 +76,24 @@ rendered_checksum() {
   [[ $first == "$second" ]]
 }
 
+@test "disabled front controller returns 404 without altering PHP and dotfile locations" {
+  export NGINX_FRONT_CONTROLLER=0
+  render_config "$TEST_TMPDIR/rendered"
+
+  # nginx variables must remain literal in the rendered configuration.
+  # shellcheck disable=SC2016
+  run grep -F 'try_files $uri $uri/ =404;' "$TEST_TMPDIR/rendered/nginx.conf"
+  assert_success
+  # shellcheck disable=SC2016
+  run grep -F '/index.php?$query_string' "$TEST_TMPDIR/rendered/nginx.conf"
+  [[ $status -eq 1 ]]
+  run grep -F 'location ~ (^|/)\.' "$TEST_TMPDIR/rendered/nginx.conf"
+  assert_success
+  # shellcheck disable=SC2016
+  run grep -F 'try_files $fastcgi_script_name =404;' "$TEST_TMPDIR/rendered/nginx.conf"
+  assert_success
+}
+
 @test "render_config escapes a document root with nginx metacharacters" {
   mkdir -p "$TEST_TMPDIR/path with \\$ and \"quote\""
   export DOCUMENT_ROOT="$TEST_TMPDIR/path with \\$ and \"quote\""
@@ -114,6 +132,7 @@ rendered_checksum() {
   export RENDER_DOCUMENT_ROOT=/srv/app
   export RENDER_TZ=UTC
   export RENDER_CONFIG_DIR=/tmp/config
+  export RENDER_NGINX_FALLBACK='=404'
   export PHP_MEMORY_LIMIT=256M
   export PHP_UPLOAD_MAX_FILESIZE=64M
   export PHP_POST_MAX_SIZE=64M
